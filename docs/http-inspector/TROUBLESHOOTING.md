@@ -94,6 +94,23 @@ não foi verificado com tráfego real (ver [SECURITY.md](SECURITY.md)). O
 custo mostrado é sempre **equivalente de API**, não a cobrança da
 assinatura.
 
+## Um `429` "Sonda de cota" no início da sessão
+
+Em sessões interativas com login de assinatura (claude.ai), o Claude Code
+envia ao iniciar uma **sonda de cota**: `POST /v1/messages` com
+`max_tokens: 1` e a única mensagem `"quota"`, sem `system`, `tools` nem
+stream, para ler os cabeçalhos `anthropic-ratelimit-unified-*` da resposta.
+O inspector a mostra como **"Sonda de cota (auxiliar)"** (kind
+`quota_probe`): não conta como erro nem como inferência, e seu uso fica
+fora dos totais de tokens, da comparação com a telemetria e do Context
+Diff. O filtro "Erros" também a deixa de fora; o filtro de tipo "Sonda de
+cota" a mostra.
+
+Observado (uma conta, Claude Code 2.1.331, duas execuções interativas pelo
+proxy): a sonda recebeu `429 rate_limit_error` e a sessão seguiu
+normalmente. Não foi verificado se o mesmo acontece sem o proxy. Trocas
+gravadas antes desta versão mantêm o tipo `model_inference`.
+
 ## Contagens diferentes entre proxy, OTLP e JSONL
 
 São fontes diferentes e **não são somadas**:

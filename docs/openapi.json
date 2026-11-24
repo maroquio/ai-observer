@@ -806,7 +806,7 @@
           },
           "kind": {
             "$ref": "#/components/schemas/HTTPExchangeKind",
-            "description": "Kind: model_inference, token_count, other_api, transport_error"
+            "description": "Kind: model_inference, token_count, quota_probe (Claude Code's quota\nprobe, an auxiliary call), other_api, transport_error"
           },
           "messageId": {
             "type": "string"
@@ -1070,10 +1070,11 @@
         "type": "object"
       },
       "HTTPExchangeKind": {
-        "description": "ExchangeKind is what an observed HTTP exchange was, by its endpoint\n- model_inference: KindModelInference is POST /v1/messages: the model generated a reply\n- token_count: KindTokenCount is POST /v1/messages/count_tokens: an estimate of the input tokens of a request, no generation\n- other_api: KindOtherAPI is any other path that went through the proxy\n- transport_error: KindTransportError is an exchange that got no upstream response",
+        "description": "ExchangeKind is what an observed HTTP exchange was, by its endpoint\n- model_inference: KindModelInference is POST /v1/messages: the model generated a reply\n- token_count: KindTokenCount is POST /v1/messages/count_tokens: an estimate of the input tokens of a request, no generation\n- quota_probe: KindQuotaProbe is a POST /v1/messages that is Claude Code's quota probe (IsQuotaProbe): an auxiliary call, not a turn of the conversation. Known only once the request body was read, so an exchange in progress is still KindModelInference.\n- other_api: KindOtherAPI is any other path that went through the proxy\n- transport_error: KindTransportError is an exchange that got no upstream response",
         "enum": [
           "model_inference",
           "token_count",
+          "quota_probe",
           "other_api",
           "transport_error"
         ],
@@ -1697,6 +1698,7 @@
             "type": "integer"
           },
           "errors": {
+            "description": "Errors: status \u003e= 400 or no response, quota probes left out",
             "format": "int64",
             "type": "integer"
           },
@@ -1737,6 +1739,11 @@
           "partialTokens": {
             "$ref": "#/components/schemas/HTTPTokenTotals"
           },
+          "quotaProbes": {
+            "description": "QuotaProbes are Claude Code's quota probes: auxiliary calls, left out\nof Inference, Errors, the token totals and the comparison",
+            "format": "int64",
+            "type": "integer"
+          },
           "retries": {
             "format": "int64",
             "type": "integer"
@@ -1758,6 +1765,7 @@
           "exchanges",
           "inference",
           "tokenCounts",
+          "quotaProbes",
           "other",
           "errors",
           "retries",

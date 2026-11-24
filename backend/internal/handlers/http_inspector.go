@@ -284,7 +284,7 @@ func (h *HTTPInspector) DeleteRun(w http.ResponseWriter, r *http.Request) {
 func exchangeFilter(p *params) storage.HTTPExchangeFilter {
 	f := storage.HTTPExchangeFilter{
 		Kind: p.Enum("kind", "", "", string(anthropicwire.KindModelInference), string(anthropicwire.KindTokenCount),
-			string(anthropicwire.KindOtherAPI), string(anthropicwire.KindTransportError)),
+			string(anthropicwire.KindQuotaProbe), string(anthropicwire.KindOtherAPI), string(anthropicwire.KindTransportError)),
 		State: p.Enum("state", "", "", api.ExchangeInProgress, api.ExchangeComplete, api.ExchangePartial,
 			api.ExchangeAborted, api.ExchangeFailed, api.ExchangeInterrupted),
 		Model:     p.Str("model"),

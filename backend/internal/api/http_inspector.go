@@ -210,7 +210,8 @@ type HTTPExchange struct {
 	Method    string `json:"method"`
 	Path      string `json:"path"`
 	Query     string `json:"query,omitempty"`
-	// Kind: model_inference, token_count, other_api, transport_error
+	// Kind: model_inference, token_count, quota_probe (Claude Code's quota
+	// probe, an auxiliary call), other_api, transport_error
 	Kind  string `json:"kind"`
 	State string `json:"state"`
 	// Status is the HTTP status the client received (0: none)
@@ -436,12 +437,16 @@ type HTTPTrafficSummary struct {
 	Exchanges   int64 `json:"exchanges"`
 	Inference   int64 `json:"inference"`
 	TokenCounts int64 `json:"tokenCounts"`
+	// QuotaProbes are Claude Code's quota probes: auxiliary calls, left out
+	// of Inference, Errors, the token totals and the comparison
+	QuotaProbes int64 `json:"quotaProbes"`
 	Other       int64 `json:"other"`
-	Errors      int64 `json:"errors"`
-	Retries     int64 `json:"retries"`
-	Partial     int64 `json:"partial"`
-	InProgress  int64 `json:"inProgress"`
-	Streams     int64 `json:"streams"`
+	// Errors: status >= 400 or no response, quota probes left out
+	Errors     int64 `json:"errors"`
+	Retries    int64 `json:"retries"`
+	Partial    int64 `json:"partial"`
+	InProgress int64 `json:"inProgress"`
+	Streams    int64 `json:"streams"`
 	// Tokens of inference exchanges with final usage; PartialTokens of
 	// those with partial usage, kept apart
 	Tokens        HTTPTokenTotals `json:"tokens"`

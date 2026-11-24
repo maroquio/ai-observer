@@ -244,6 +244,12 @@ func (e *Exchange) build(_ context.Context, snap snapshot) *storage.HTTPExchange
 			if !s.Valid && s.ParseError != "" {
 				degraded = append(degraded, "corpo da requisição não interpretado: "+truncateText(s.ParseError, 200))
 			}
+			// Claude Code's quota probe is an auxiliary call: only the row's
+			// kind changes, e.kind keeps the response parsed as an inference
+			// (an exchange without response stays a transport error)
+			if e.kind == anthropicwire.KindModelInference && ex.Kind == string(e.kind) && anthropicwire.IsQuotaProbe(s, req.data) {
+				ex.Kind = string(anthropicwire.KindQuotaProbe)
+			}
 		} else if req.decodeErr != nil {
 			degraded = append(degraded, "corpo da requisição não decodificado ("+req.decodeStatus+")")
 		}
@@ -342,7 +348,7 @@ func (e *Exchange) build(_ context.Context, snap snapshot) *storage.HTTPExchange
 	if model == "" {
 		model = ex.RequestedModel
 	}
-	if detail := e.usage(msg, countTokens, model, state, stream); detail != nil {
+	if detail := e.usage(ex.Kind, msg, countTokens, model, state, stream); detail != nil {
 		ex.Usage = &detail.HTTPUsage
 		usageRec = &storage.HTTPUsageRecord{
 			ExchangeID: e.id, RunID: e.run.ID, SessionID: ex.SessionID, Kind: ex.Kind,
@@ -453,11 +459,12 @@ func (e *Exchange) build(_ context.Context, snap snapshot) *storage.HTTPExchange
 }
 
 // usage builds an exchange's usage and estimated cost (nil: nothing to
-// record, such as an error response)
-func (e *Exchange) usage(msg *anthropicwire.Message, countTokens *int64, model, state string, stream bool) *api.HTTPUsageDetail {
+// record, such as an error response); kind is the row's kind, which a
+// quota probe changes
+func (e *Exchange) usage(kind string, msg *anthropicwire.Message, countTokens *int64, model, state string, stream bool) *api.HTTPUsageDetail {
 	d := &api.HTTPUsageDetail{
 		ExchangeID: e.id,
-		Kind:       string(e.kind),
+		Kind:       kind,
 		Model:      model,
 		Snapshots:  []anthropicwire.UsageSnapshot{},
 		HTTPUsage:  api.HTTPUsage{Source: "http_proxy"},

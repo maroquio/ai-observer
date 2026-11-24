@@ -62,6 +62,7 @@ describe('httpInspector helpers', () => {
     expect(isErrorExchange({ status: 200, kind: 'model_inference', state: 'complete' })).toBe(false)
     expect(isErrorExchange({ status: 429, kind: 'model_inference', state: 'complete' })).toBe(true)
     expect(isErrorExchange({ status: 0, kind: 'transport_error', state: 'failed' })).toBe(true)
+    expect(isErrorExchange({ status: 429, kind: 'quota_probe', state: 'complete' })).toBe(false)
   })
 
   it('leaves out filter values the API would reject', () => {

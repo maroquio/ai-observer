@@ -117,6 +117,13 @@ export type HTTPExchangeKind =
    * input tokens of a request, no generation
    */
   | 'token_count'
+  /**
+   * KindQuotaProbe is a POST /v1/messages that is Claude Code's quota
+   * probe (IsQuotaProbe): an auxiliary call, not a turn of the
+   * conversation. Known only once the request body was read, so an
+   * exchange in progress is still KindModelInference.
+   */
+  | 'quota_probe'
   /** KindOtherAPI is any other path that went through the proxy */
   | 'other_api'
   /** KindTransportError is an exchange that got no upstream response */
@@ -1148,7 +1155,13 @@ export interface HTTPTrafficSummary {
   exchanges: number
   inference: number
   tokenCounts: number
+  /**
+   * quotaProbes are Claude Code's quota probes: auxiliary calls, left out
+   * of Inference, Errors, the token totals and the comparison
+   */
+  quotaProbes: number
   other: number
+  /** Errors: status >= 400 or no response, quota probes left out */
   errors: number
   retries: number
   partial: number
@@ -1248,7 +1261,10 @@ export interface HTTPExchange {
   method: string
   path: string
   query?: string
-  /** Kind: model_inference, token_count, other_api, transport_error */
+  /**
+   * Kind: model_inference, token_count, quota_probe (Claude Code's quota
+   * probe, an auxiliary call), other_api, transport_error
+   */
   kind: HTTPExchangeKind
   state: HTTPExchangeState
   /** status is the HTTP status the client received (0: none) */

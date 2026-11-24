@@ -22,6 +22,11 @@ const (
 	// KindTokenCount is POST /v1/messages/count_tokens: an estimate of the
 	// input tokens of a request, no generation
 	KindTokenCount ExchangeKind = "token_count"
+	// KindQuotaProbe is a POST /v1/messages that is Claude Code's quota
+	// probe (IsQuotaProbe): an auxiliary call, not a turn of the
+	// conversation. Known only once the request body was read, so an
+	// exchange in progress is still KindModelInference.
+	KindQuotaProbe ExchangeKind = "quota_probe"
 	// KindOtherAPI is any other path that went through the proxy
 	KindOtherAPI ExchangeKind = "other_api"
 	// KindTransportError is an exchange that got no upstream response

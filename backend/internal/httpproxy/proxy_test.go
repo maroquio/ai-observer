@@ -923,6 +923,93 @@ func TestOtherEndpointsRecorded(t *testing.T) {
 	}
 }
 
+// Claude Code's quota probe (max_tokens 1, the user text "quota") is an
+// auxiliary call: neither an error nor an inference, its usage outside the
+// totals, the comparison and the Context Diff. A near miss stays an
+// inference.
+func TestQuotaProbeIsAuxiliary(t *testing.T) {
+	h := newHarness(t, httpcapture.ModeSafe)
+	sid := "aaaaaaaa-bbbb-cccc-dddd-000000000001"
+	probe := `{"model":"` + testModel + `","max_tokens":1,"messages":[{"role":"user","content":"quota"}],` +
+		`"metadata":{"user_id":"{\"session_id\":\"` + sid + `\"}"}}`
+	nearMiss := strings.Replace(probe, `"max_tokens":1`, `"max_tokens":2`, 1)
+	h.up.handler = func(w http.ResponseWriter, r *http.Request, body []byte) bool {
+		if r.URL.Path != "/v1/messages" || strings.Contains(string(body), `"stream":true`) {
+			return false
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Query().Get("limited") == "1":
+			w.Header().Set("Request-Id", "req_probe_429")
+			w.WriteHeader(http.StatusTooManyRequests)
+			fmt.Fprint(w, `{"type":"error","error":{"type":"rate_limit_error","message":"Error"}}`)
+		default:
+			w.Header().Set("Request-Id", "req_json_"+r.URL.Query().Get("n"))
+			fmt.Fprint(w, `{"id":"msg_p","type":"message","role":"assistant","model":"`+testModel+`",`+
+				`"content":[{"type":"text","text":"ok"}],"stop_reason":"max_tokens","usage":{"input_tokens":8,"output_tokens":5}}`)
+		}
+		return true
+	}
+	hdr := http.Header{"X-Claude-Code-Session-Id": {sid}}
+	for _, req := range []struct{ path, body string }{
+		{"/v1/messages?beta=true&limited=1", probe},
+		{"/v1/messages?beta=true&n=2", probe},
+		{"/v1/messages?beta=true&n=3", nearMiss},
+		{"/v1/messages?beta=true", requestBody(sid, true)},
+	} {
+		resp := post(t, h.proxyURL, req.path, req.body, hdr)
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+	h.flush()
+
+	ex := h.exchanges()
+	if len(ex) != 4 {
+		t.Fatalf("%d exchanges", len(ex))
+	}
+	if ex[0].Kind != "quota_probe" || ex[0].Status != 429 || ex[0].ErrorType != "rate_limit_error" ||
+		ex[0].Headline != "Chamada auxiliar: sonda de cota do Claude Code (HTTP 429, rate_limit_error)" {
+		t.Fatalf("limited probe %+v", ex[0])
+	}
+	if ex[1].Kind != "quota_probe" || ex[1].Usage == nil || ex[1].Usage.Usage.OutputTokens == nil || *ex[1].Usage.Usage.OutputTokens != 5 {
+		t.Fatalf("probe %+v", ex[1])
+	}
+	stored, err := h.store.HTTPExchange(context.Background(), ex[1].ID)
+	if err != nil || stored.Usage == nil || stored.Usage.Kind != "quota_probe" {
+		t.Fatalf("probe usage %+v %v", stored, err)
+	}
+	if ex[2].Kind != "model_inference" || ex[3].Kind != "model_inference" {
+		t.Fatalf("near miss %s, stream %s", ex[2].Kind, ex[3].Kind)
+	}
+
+	sum, err := h.store.HTTPTrafficSummary(context.Background(), h.runID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Output: 5 of the near miss and 42 of the stream, none of the probes
+	if sum.Exchanges != 4 || sum.Inference != 2 || sum.QuotaProbes != 2 || sum.Other != 0 || sum.Errors != 0 ||
+		sum.Tokens.Exchanges != 2 || sum.Tokens.Output != 47 {
+		t.Fatalf("summary %+v", sum)
+	}
+	errs, err := h.store.HTTPExchanges(context.Background(), storage.HTTPExchangeFilter{RunID: h.runID, Status: "error"}, storage.Page{Limit: 10})
+	if err != nil || len(errs.Exchanges) != 0 {
+		t.Fatalf("error filter %+v %v", errs, err)
+	}
+	probes, err := h.store.HTTPExchanges(context.Background(), storage.HTTPExchangeFilter{RunID: h.runID, Kind: "quota_probe"}, storage.Page{Limit: 10})
+	if err != nil || len(probes.Exchanges) != 2 {
+		t.Fatalf("kind filter %+v %v", probes, err)
+	}
+	ids, err := h.store.HTTPSessionRequestIDs(context.Background(), sid)
+	if err != nil || len(ids) != 2 || ids[0] != "req_json_3" {
+		t.Fatalf("request IDs %v %v", ids, err)
+	}
+	// The stream's Context Diff compares with the near miss, never a probe
+	cands, err := h.store.HTTPDiffCandidates(context.Background(), h.runID, "model_inference", sid, ex[3].Seq, 10)
+	if err != nil || len(cands) != 1 || cands[0].ExchangeID != ex[2].ID {
+		t.Fatalf("diff candidates %+v %v", cands, err)
+	}
+}
+
 // AC-13: a secret in a body is masked in the safe variant; full_raw keeps
 // the raw bytes in a local file only
 func TestSecretInBody(t *testing.T) {

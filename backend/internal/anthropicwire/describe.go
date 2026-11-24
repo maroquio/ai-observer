@@ -56,6 +56,8 @@ func Describe(in DescribeInput) []Observation {
 			Text:     fmt.Sprintf("Chamada auxiliar a %s %s; o conteúdo não foi interpretado como Messages API.", in.Method, in.Path),
 			Evidence: fmt.Sprintf("method=%s path=%s", in.Method, in.Path),
 		})
+	case KindQuotaProbe:
+		obs = append(obs, describeQuotaProbe())
 	case KindModelInference:
 		obs = append(obs, describeRequest(in)...)
 		obs = append(obs, describeResponse(in)...)
@@ -78,6 +80,9 @@ func Headline(in DescribeInput) string {
 			return "Falha de transporte: sem resposta do upstream"
 		}
 		return "Falha de transporte: " + truncateRunes(in.TransportError, 120)
+	}
+	if in.endpointKind() == KindQuotaProbe {
+		return quotaProbeHeadline(in)
 	}
 	if e := in.apiError(); e != nil {
 		typ := e.Type
@@ -106,6 +111,30 @@ func Headline(in DescribeInput) string {
 		return inferenceHeadline(in)
 	}
 	return fmt.Sprintf("Chamada auxiliar: %s %s", in.Method, in.Path)
+}
+
+// quotaProbeHeadline names Claude Code's quota probe, with the response
+// status (an error here is not an error of the conversation)
+func quotaProbeHeadline(in DescribeInput) string {
+	h := "Chamada auxiliar: sonda de cota do Claude Code"
+	switch e := in.apiError(); {
+	case e != nil && e.Type != "" && in.Status > 0:
+		return fmt.Sprintf("%s (HTTP %d, %s)", h, in.Status, e.Type)
+	case in.Status > 0:
+		return fmt.Sprintf("%s (HTTP %d)", h, in.Status)
+	}
+	return h
+}
+
+// describeQuotaProbe explains Claude Code's quota probe (IsQuotaProbe)
+func describeQuotaProbe() Observation {
+	return Observation{
+		Code: "quota_probe", Side: SideRequest, Certainty: CertaintyInferred,
+		Text: "Sonda de cota do Claude Code: uma chamada auxiliar limitada a 1 token de saída para ler o estado da cota da assinatura " +
+			"nos cabeçalhos anthropic-ratelimit-unified-* da resposta. Não é um turno da conversa: não conta como erro " +
+			"nem como inferência e fica fora dos totais de tokens e da comparação com a telemetria.",
+		Evidence: `max_tokens=1; messages=[user: "quota"]; sem system, tools e stream`,
+	}
 }
 
 // inferenceHeadline summarizes the reply of a model inference

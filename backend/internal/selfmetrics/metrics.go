@@ -50,7 +50,7 @@ var (
 	// HTTP capture proxy (internal/httpproxy, internal/httpcapture). Labels
 	// are fixed words; paths, models and IDs are never labels.
 	HTTPCaptureExchanges = Default.NewCounter("ai_observer_http_capture_exchanges_total",
-		"Exchanges that went through the HTTP capture proxy, by kind (model_inference, token_count, other_api, transport_error) and state (complete, partial, aborted, failed)",
+		"Exchanges that went through the HTTP capture proxy, by kind (model_inference, token_count, quota_probe, other_api, transport_error) and state (complete, partial, aborted, failed)",
 		"kind", "state")
 	HTTPCaptureBytes = Default.NewCounter("ai_observer_http_capture_bytes_total",
 		"Body bytes forwarded by the HTTP capture proxy, by direction (request: client to upstream, response: upstream to client)", "direction")

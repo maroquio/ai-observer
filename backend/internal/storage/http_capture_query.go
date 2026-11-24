@@ -33,8 +33,8 @@ type HTTPExchangeFilter struct {
 	SessionID string
 	Kind      string
 	State     string
-	// Status: "error" (status >= 400 or no response), "ok" (< 400), or an
-	// HTTP status code
+	// Status: "error" (status >= 400 or no response, quota probes left
+	// out), "ok" (< 400), or an HTTP status code
 	Status string
 	Model  string
 	// Stream: "true" or "false"
@@ -189,7 +189,9 @@ func exchangeConditions(f HTTPExchangeFilter) (conditions, error) {
 	switch f.Status {
 	case "":
 	case "error":
-		c.add("(COALESCE(e.status, 0) >= 400 OR e.status IS NULL AND e.state IN ('failed', 'aborted', 'partial', 'interrupted') OR e.error_type IS NOT NULL)")
+		// Claude Code's quota probe is auxiliary: its errors are not errors
+		// of the traffic (HTTPTrafficSummary.Errors counts the same way)
+		c.add("e.kind <> 'quota_probe' AND (COALESCE(e.status, 0) >= 400 OR e.status IS NULL AND e.state IN ('failed', 'aborted', 'partial', 'interrupted') OR e.error_type IS NOT NULL)")
 	case "ok":
 		c.add("e.status BETWEEN 1 AND 399")
 	default:
@@ -734,8 +736,9 @@ func (s *DuckDBStore) HTTPTrafficSummary(ctx context.Context, runID, sessionID s
 	err := s.db.QueryRowContext(ctx, `SELECT count(*),
 		count(*) FILTER (WHERE e.kind = 'model_inference'),
 		count(*) FILTER (WHERE e.kind = 'token_count'),
-		count(*) FILTER (WHERE e.kind NOT IN ('model_inference', 'token_count')),
-		count(*) FILTER (WHERE COALESCE(e.status, 0) >= 400 OR e.state = 'failed' OR e.error_type IS NOT NULL),
+		count(*) FILTER (WHERE e.kind = 'quota_probe'),
+		count(*) FILTER (WHERE e.kind NOT IN ('model_inference', 'token_count', 'quota_probe')),
+		count(*) FILTER (WHERE e.kind <> 'quota_probe' AND (COALESCE(e.status, 0) >= 400 OR e.state = 'failed' OR e.error_type IS NOT NULL)),
 		count(*) FILTER (WHERE COALESCE(e.retry_count, 0) > 0),
 		count(*) FILTER (WHERE e.state IN ('partial', 'aborted', 'interrupted')),
 		count(*) FILTER (WHERE e.state = 'in_progress'),
@@ -745,7 +748,7 @@ func (s *DuckDBStore) HTTPTrafficSummary(ctx context.Context, runID, sessionID s
 		max(e.started_at + to_milliseconds(COALESCE(e.duration_ms, 0))),
 		CAST(to_json(list_sort(list_distinct(list(COALESCE(e.response_model, e.requested_model))))) AS VARCHAR)
 		FROM http_capture_exchanges e`+where, args...).Scan(
-		&out.Exchanges, &out.Inference, &out.TokenCounts, &out.Other, &out.Errors, &out.Retries, &out.Partial,
+		&out.Exchanges, &out.Inference, &out.TokenCounts, &out.QuotaProbes, &out.Other, &out.Errors, &out.Retries, &out.Partial,
 		&out.InProgress, &out.Streams, &out.Degraded, &first, &last, &lastEnd, &models)
 	if err != nil {
 		return nil, fmt.Errorf("summarizing exchanges: %w", err)

@@ -27,6 +27,7 @@ import type {
 export const KIND_LABELS: Record<HTTPExchangeKind, string> = {
   model_inference: 'Inferência',
   token_count: 'Contagem de tokens',
+  quota_probe: 'Sonda de cota (auxiliar)',
   other_api: 'Outro endpoint',
   transport_error: 'Erro de transporte',
 }
@@ -300,8 +301,9 @@ export function exchangeTokens(exchange: HTTPExchange): { value: number; estimat
   return total == null ? null : { value: total, estimate: false }
 }
 
-/** Whether an exchange is an error: HTTP status ≥ 400, or no response */
+/** Whether an exchange is an error: HTTP status ≥ 400, or no response (Claude Code's quota probe is auxiliary, never an error) */
 export function isErrorExchange(exchange: Pick<HTTPExchange, 'status' | 'kind' | 'state'>): boolean {
+  if (exchange.kind === 'quota_probe') return false
   return exchange.status >= 400 || exchange.status === 0 || exchange.kind === 'transport_error' || exchange.state === 'failed'
 }
 

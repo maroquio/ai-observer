@@ -142,7 +142,7 @@ export function summaryFixture(overrides: Partial<HTTPTrafficSummary> = {}): HTT
     totalInput: 20_012, totalProcessed: 20_352, cacheReadShare: 0.8995, exchanges: 1,
   }
   return {
-    exchanges: 7, inference: 4, tokenCounts: 1, other: 2, errors: 3, retries: 1, partial: 1, inProgress: 0, streams: 2,
+    exchanges: 7, inference: 4, tokenCounts: 1, quotaProbes: 0, other: 2, errors: 3, retries: 1, partial: 1, inProgress: 0, streams: 2,
     tokens,
     partialTokens: { ...tokens, exchanges: 1 },
     countedTokens: 20_012,
@@ -170,7 +170,7 @@ export function emptyTrafficFixture(sessionId = SESSION_ID): HTTPSessionTrafficR
     hasMore: false,
     runs: [],
     summary: {
-      exchanges: 0, inference: 0, tokenCounts: 0, other: 0, errors: 0, retries: 0, partial: 0, inProgress: 0, streams: 0,
+      exchanges: 0, inference: 0, tokenCounts: 0, quotaProbes: 0, other: 0, errors: 0, retries: 0, partial: 0, inProgress: 0, streams: 0,
       tokens: EMPTY_TOKENS, partialTokens: EMPTY_TOKENS, countedTokens: 0, costUsd: 0, costStatus: 'unavailable', durationMs: 0,
       models: [], degraded: 0,
     },

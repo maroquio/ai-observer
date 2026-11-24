@@ -46,6 +46,9 @@ export function TrafficSummary({ summary, exchanges, allLoaded = true, runs, com
           items={[
             ['Inferência (/v1/messages)', formatCount(summary.inference)],
             ['Contagem de tokens (count_tokens)', formatCount(summary.tokenCounts)],
+            ...(summary.quotaProbes > 0
+              ? ([['Sondas de cota do Claude Code (auxiliares)', formatCount(summary.quotaProbes)]] as Array<[string, ReactNode]>)
+              : []),
             ['Outros endpoints', formatCount(summary.other)],
             ['Respostas em streaming (SSE)', formatCount(summary.streams)],
             ...(summary.inProgress > 0 ? ([['Em andamento', formatCount(summary.inProgress)]] as Array<[string, ReactNode]>) : []),
