@@ -204,6 +204,7 @@ func (s *DuckDBStore) initSchema(ctx context.Context) error {
 		indexDashboards,
 		indexImportState,
 		migrateImportStateForWatch,
+		schemaHTTPCapture,
 	}
 
 	for _, schema := range schemas {

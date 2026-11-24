@@ -106,6 +106,9 @@ type Config struct {
 	// LogSettings before they load the configuration
 	LogLevel  string
 	LogFormat string
+
+	// HTTPProxy configures the Anthropic HTTP capture proxy (off by default)
+	HTTPProxy HTTPProxyConfig
 }
 
 // Load reads the configuration from the environment. Invalid numbers are
@@ -138,6 +141,8 @@ func Load() *Config {
 
 		LogLevel:  level,
 		LogFormat: format,
+
+		HTTPProxy: loadHTTPProxy(),
 	}
 }
 

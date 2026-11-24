@@ -23,6 +23,9 @@ type StatusResponse struct {
 	Settings     StatusSettings  `json:"settings"`
 	Pricing      []StatusPricing `json:"pricing"`
 	Imports      []StatusImport  `json:"imports"`
+	// HTTPInspector describes the HTTP capture proxy (enabled false when it
+	// does not run); never credentials
+	HTTPInspector HTTPInspectorStatus `json:"httpInspector"`
 }
 
 // StatusServer describes where the server listens

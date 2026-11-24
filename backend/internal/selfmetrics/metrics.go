@@ -46,6 +46,37 @@ var (
 
 	RetentionDeletedRows = Default.NewCounter("ai_observer_retention_deleted_rows_total",
 		"Rows deleted by retention (AI_OBSERVER_RETENTION_DAYS), by signal (spans, logs, metrics)", "signal")
+
+	// HTTP capture proxy (internal/httpproxy, internal/httpcapture). Labels
+	// are fixed words; paths, models and IDs are never labels.
+	HTTPCaptureExchanges = Default.NewCounter("ai_observer_http_capture_exchanges_total",
+		"Exchanges that went through the HTTP capture proxy, by kind (model_inference, token_count, other_api, transport_error) and state (complete, partial, aborted, failed)",
+		"kind", "state")
+	HTTPCaptureBytes = Default.NewCounter("ai_observer_http_capture_bytes_total",
+		"Body bytes forwarded by the HTTP capture proxy, by direction (request: client to upstream, response: upstream to client)", "direction")
+	HTTPCaptureStoredBytes = Default.NewCounter("ai_observer_http_capture_stored_bytes_total",
+		"Body bytes the HTTP capture stored in its directory")
+	HTTPCaptureSSEEvents = Default.NewCounter("ai_observer_http_capture_sse_events_total",
+		"Server-Sent Events parsed from proxied responses")
+	HTTPCaptureDropped = Default.NewCounter("ai_observer_http_capture_dropped_total",
+		"Capture data lost while the traffic continued, by reason (queue_full: records, buffer_full: body chunks, closed: after shutdown began, event_limit: SSE events over the per-exchange limit)",
+		"reason")
+	HTTPCaptureErrors = Default.NewCounter("ai_observer_http_capture_errors_total",
+		"HTTP capture failures, by stage (store, blob, parse, decode, upstream)", "stage")
+	HTTPCaptureUpstreamSeconds = Default.NewHistogram("ai_observer_http_capture_upstream_seconds",
+		"Duration of proxied exchanges, from the request to the end of the response", DurationBuckets)
+	HTTPCaptureFirstByteSeconds = Default.NewHistogram("ai_observer_http_capture_first_byte_seconds",
+		"Time from a proxied request to the first response byte from upstream", DurationBuckets)
+	HTTPCapturePersistSeconds = Default.NewHistogram("ai_observer_http_capture_persist_seconds",
+		"Duration of storing a batch of capture records", DurationBuckets)
+	HTTPCaptureQueueLength = Default.NewGauge("ai_observer_http_capture_queue_length",
+		"Capture records waiting to be stored")
+	HTTPCaptureQueueCapacity = Default.NewGauge("ai_observer_http_capture_queue_capacity",
+		"Capacity of the capture queue (AI_OBSERVER_HTTP_CAPTURE_QUEUE_SIZE)")
+	HTTPCaptureInFlight = Default.NewGauge("ai_observer_http_capture_in_flight",
+		"Exchanges the HTTP capture proxy is forwarding")
+	HTTPCaptureActiveRuns = Default.NewGauge("ai_observer_http_capture_active_runs",
+		"Active capture runs (the shared port and launched processes)")
 )
 
 // Transports of the transport label: OTLP/HTTP and the API, and OTLP/gRPC

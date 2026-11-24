@@ -116,3 +116,15 @@ func GetClaudeCostWithMode(mode PricingMode, model string, usage ClaudeTokenUsag
 		return 0
 	}
 }
+
+// ClaudePricingForPrompt returns the pricing of a Claude model for a request
+// whose prompt (input_tokens plus cache reads and writes) has promptTokens
+// tokens: the long-context tier above its threshold. It returns nil when the
+// model is not in the catalog.
+func ClaudePricingForPrompt(model string, promptTokens int64) *ModelPricing {
+	p := GetClaudePricing(model)
+	if p == nil {
+		return nil
+	}
+	return p.forPromptSize(promptTokens)
+}
