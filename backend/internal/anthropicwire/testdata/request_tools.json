@@ -1,0 +1,37 @@
+{
+  "model": "claude-sonnet-5-5",
+  "max_tokens": 32000,
+  "temperature": 1,
+  "stream": true,
+  "thinking": {"type": "enabled", "budget_tokens": 31999},
+  "system": [
+    {"type": "text", "text": "You are a fictional coding assistant used in tests."},
+    {"type": "text", "text": "Responda em português, com acentuação correta.", "cache_control": {"type": "ephemeral", "ttl": "1h"}}
+  ],
+  "tools": [
+    {"name": "Read", "description": "Reads a file.", "input_schema": {"type": "object", "properties": {"file_path": {"type": "string"}, "limit": {"type": "number"}}, "required": ["file_path"]}},
+    {"name": "Grep", "description": "Searches files.", "input_schema": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}},
+    {"name": "Bash", "description": "Runs a command.", "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}}, "defer_loading": true, "cache_control": {"type": "ephemeral"}}
+  ],
+  "messages": [
+    {"role": "user", "content": "Onde está a função principal?"},
+    {"role": "assistant", "content": [
+      {"type": "text", "text": "Vou procurar."},
+      {"type": "tool_use", "id": "toolu_01REQHISTORY0000000001", "name": "Grep", "input": {"pattern": "func main", "path": "src"}}
+    ]},
+    {"role": "user", "content": [
+      {"type": "tool_result", "tool_use_id": "toolu_01REQHISTORY0000000001", "content": "src/cmd/app/main.go:12:func main() {\nsrc/tools/gen/main.go:8:func main() {"},
+      {"type": "text", "text": "Leia o primeiro."}
+    ]},
+    {"role": "assistant", "content": [
+      {"type": "tool_use", "id": "toolu_01REQHISTORY0000000002", "name": "Read", "input": {"file_path": "/home/dev/projeto/src/cmd/app/main.go"}}
+    ]},
+    {"role": "user", "content": [
+      {"type": "tool_result", "tool_use_id": "toolu_01REQHISTORY0000000002", "is_error": true, "content": [{"type": "text", "text": "Erro: permissão negada (ação bloqueada)."}, {"type": "text", "text": " Tente outro caminho.", "cache_control": {"type": "ephemeral"}}]}
+    ]}
+  ],
+  "metadata": {"user_id": "{\"device_id\":\"0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0\",\"account_uuid\":\"\",\"session_id\":\"11111111-2222-4333-8444-555555555555\"}"},
+  "context_management": {"edits": [{"type": "clear_thinking_20251015", "keep": "all"}]},
+  "future_param": 7,
+  "another_unknown": {"a": [1, 2]}
+}
