@@ -1,0 +1,8 @@
+{
+  "name": "http-inspector-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --experimental-strip-types src/auth.test.ts"
+  }
+}
