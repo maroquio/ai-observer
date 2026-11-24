@@ -179,8 +179,53 @@ não pegavam: o Claude Code move o `cache_control` para a mensagem mais nova
 a cada request, o que mudava o hash da primeira mensagem e fazia o Context
 Diff perder a conversa.
 
-**Não verificado:** login por assinatura (OAuth claude.ai) através do
-proxy, e tráfego contra a API real — ambos exigem conta e geram consumo.
+## Smoke real com login por assinatura (claude.ai)
+
+Autorizado pelo usuário (consome uso da conta). Claude Code 2.1.331 em
+`claude -p`, login por assinatura (sem `ANTHROPIC_API_KEY`), proxy →
+`https://api.anthropic.com`, modelo Haiku, pasta vazia com um arquivo de
+texto, `--allowedTools Read --max-turns 3`, telemetria OTLP apontada para o
+mesmo AI Observer. Duas execuções; a captura (privada: system prompt,
+e-mail e IDs da conta) foi apagada depois da verificação. Só números
+agregados aqui:
+
+- `curl` sem credencial: o 401 da Anthropic volta pelo proxy com
+  `request-id` (TLS, `Host` e erro no formato da API);
+- 3 trocas por execução: `HEAD /api/hello` (outro endpoint), inferência que
+  pede `Read` (`tool_use`) e inferência final (`end_turn`); resposta correta,
+  saída 0;
+- `Authorization: Bearer [REDACTED]` (OAuth); 0 ocorrências de `sk-ant-` e
+  de `Bearer` com valor no banco, nos arquivos de captura e no export;
+- comparação com a telemetria `exact` (2 de 2 `request_id`), entrada e
+  saída iguais nas duas fontes, não somadas.
+
+Achados que o upstream simulado não mostrava, corrigidos:
+
+1. **SSE comprimido.** A API respondeu `Content-Encoding: gzip` (o Claude
+   Code envia `Accept-Encoding: gzip, deflate, br, zstd`). Antes, os 33
+   eventos ficavam com o mesmo tempo (interpretados ao final); agora o
+   stream é decodificado pedaço a pedaço (`anthropicwire.NewStreamDecoder`)
+   e cada evento recebe a hora de chegada do pedaço que o completou: 34
+   eventos em 5 tempos distintos ao longo de ~0,9 s (eventos decodificados
+   do mesmo pedaço da rede compartilham o tempo).
+2. **Cache de 1 h.** Com assinatura, toda escrita de cache foi de 1 h
+   (ex.: 32.413 tokens), sem preço no catálogo: o custo ficava `partial` e
+   omitia ~94%. Agora 1 h = 2 × input (regra da Anthropic,
+   [ADR-006](adr/ADR-006-custo-e-ttl-de-cache.md)). Na segunda execução
+   (binário corrigido) o custo do proxy ficou `complete` e igual, até a
+   última casa, ao `costUSD` da telemetria do próprio Claude Code; na
+   primeira, a mesma regra aplicada aos tokens capturados dá exatamente o
+   `costUSD` da telemetria.
+
+Testes novos: `TestStreamDecoderDecodesChunkByChunk` (gzip, zlib, deflate
+puro, brotli, zstd: cada evento sai depois do seu pedaço e antes do
+próximo), `TestStreamDecoderErrors`, `FuzzStreamDecoder`,
+`TestCompressedStreamEventTimes` (gzip com pausa entre eventos e um evento
+partido em dois pedaços), `TestCompressedStreamCut`,
+`TestPriceUsageCacheWrite1h` (inclui a faixa de contexto longo).
+
+**Não verificado:** o modo interativo do Claude Code com tráfego real e o
+login por API key contra a API real.
 
 ## Limitações dos testes
 
@@ -188,5 +233,6 @@ proxy, e tráfego contra a API real — ambos exigem conta e geram consumo.
   não faz parte da suíte do projeto); a interface é testada com Vitest +
   Testing Library (jsdom) e foi conferida manualmente num navegador real
   (telas acima).
-- SSE com `Content-Encoding` é testado quanto ao repasse íntegro; a
-  interpretação ocorre ao final, sem tempo por evento.
+- O tempo por evento de um SSE comprimido é o do pedaço da rede que
+  completou o evento: eventos decodificados do mesmo pedaço compartilham o
+  tempo.

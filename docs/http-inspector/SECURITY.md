@@ -65,12 +65,16 @@ fictícios.
 ## Limitações conhecidas
 
 - Login por assinatura (OAuth claude.ai) através de `ANTHROPIC_BASE_URL`
-  **não foi verificado** com tráfego real (exigiria uma conta e geraria
-  consumo). Com API key, o fluxo foi verificado com chave fictícia contra o
-  upstream simulado.
-- Respostas SSE com `Content-Encoding` (gzip etc.) são repassadas sem
-  atraso, mas interpretadas só ao final: os eventos aparecem sem tempo de
-  chegada individual. A API normalmente não comprime SSE.
+  foi verificado com tráfego real em `claude -p` (Claude Code 2.1.331, uma
+  conta; [TESTING.md](TESTING.md)): o cabeçalho `Authorization: Bearer …`
+  chega à API e é gravado como `Bearer [REDACTED]`; nenhum `sk-ant-` nem
+  `Bearer` com valor no banco, nos arquivos de captura ou no export. O modo
+  interativo não foi verificado com tráfego real.
+- Os cabeçalhos de resposta da API real incluem identificadores da conta
+  (`Anthropic-Organization-Id`, `Anthropic-Workspace-Id`) e o estado dos
+  limites da assinatura (`Anthropic-Ratelimit-Unified-*`). Não são
+  credenciais: são gravados e entram no export. Revise um export antes de
+  compartilhá-lo.
 - O redator é baseado em padrões: um segredo sem formato reconhecível e
   fora de uma chave sensível pode passar. Para material especialmente
   sensível use `metadata_only`.

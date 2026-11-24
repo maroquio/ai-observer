@@ -72,7 +72,8 @@ execução (a captura não foi versionada):
 - [x] Documentação em `docs/http-inspector/`, README e CHANGELOG.
 - [x] Suite completa, `-race`, lint, build e E2E keyless — [TESTING.md](TESTING.md).
 - [x] Verificação com o Claude Code 2.1.331 real contra upstream simulado (sem custo), inclusive na interface (telas em `docs/images/http-inspector-*.png`).
-- [ ] Push da branch para o fork (aguardando autorização do usuário).
+- [x] Push da branch para o fork (autorizado pelo usuário; sem PR).
+- [x] Smoke real com login por assinatura contra a API (autorizado pelo usuário): OAuth pelo proxy, credencial mascarada, comparação `exact`; corrigidos o tempo por evento de SSE comprimido e o preço da escrita de cache de 1 h ([TESTING.md](TESTING.md)).
 
 ## Definição de pronto (seção 17)
 
@@ -88,11 +89,11 @@ execução (a captura não foi versionada):
 | D08 Response raw | ok | headers/status/corpo/stream/erros, `TestUpstreamErrorsPassThrough` |
 | D09 System prompt | ok | resumo + corpo; verificado com Claude Code real (3 blocos, 29 KB) |
 | D10 Tools | ok | 12 tools, `defer_loading`, sem truncamento silencioso (`truncated` explícito) |
-| D11 SSE events | ok | todos os tipos, inclusive desconhecidos, com `offset_ms` |
+| D11 SSE events | ok | todos os tipos, inclusive desconhecidos, com `offset_ms`; streams comprimidos (a API real usa gzip) com o tempo do pedaço de cada evento |
 | D12 Token counting | ok | `token_count`, separado da inferência |
 | D13 Usage | ok | testes de uso cumulativo e totais |
 | D14 TTL cache | ok | 5m/1h/unknown |
-| D15 Custo | ok | catálogo; `partial`/`unavailable`, nunca 0 inventado |
+| D15 Custo | ok | catálogo; escrita de 1 h = 2 × input (ADR-006, igual ao custo do Claude Code); `partial`/`unavailable`, nunca 0 inventado |
 | D16 Sem dupla contagem | ok | tabelas separadas; comparação por `request_id` |
 | D17 Sessões | ok | evidência de sessão; execuções isoladas; histórico após reinício |
 | D18 Tool flow | ok | vínculos `matched`/`pending`/`unresolved`/`ambiguous`, nota de execução local não observada |
@@ -105,11 +106,10 @@ execução (a captura não foi versionada):
 | D25 Testes | ok | [TESTING.md](TESTING.md) |
 | D26 Docs | ok | este diretório |
 | D27 Changelog | ok | `[Unreleased]` |
-| D28 Entrega | pendente | push e relatório final |
+| D28 Entrega | ok | branch no fork, relatório final |
 
 ## Pendências conhecidas
 
-- Login por assinatura (OAuth claude.ai) via `ANTHROPIC_BASE_URL` não verificado com tráfego real.
-- SSE com `Content-Encoding` interpretado só ao final (sem tempo por evento).
-- O custo de escrita de cache de 1 h fica `partial` enquanto o catálogo não tiver esse preço.
+- Modo interativo do Claude Code não verificado com tráfego real (só `claude -p`).
+- Eventos SSE que chegam no mesmo pedaço da rede compartilham o tempo de chegada.
 - Uma sessão vista só pelo proxy não aparece na lista de Sessões (que vem da telemetria); é acessível pela execução e por `/sessions/{id}?view=traffic`.

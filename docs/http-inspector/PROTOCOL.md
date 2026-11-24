@@ -139,8 +139,13 @@ Divisão da escrita de cache: `cache_creation.ephemeral_5m_input_tokens` e
 
 Custo equivalente de API (catálogo de preços do AI Observer, por milhão de
 tokens): `input × preço_input + output × preço_output + cache_read ×
-preço_cache_read + cache_write_5m × preço_cache_write`. A escrita de 1 h não
-tem preço no catálogo: o custo fica `partial` e o motivo é mostrado. Um
+preço_cache_read + cache_write_5m × preço_cache_write + cache_write_1h ×
+2 × preço_input`. O catálogo (models.dev) não tem preço de escrita de 1 h;
+ele é derivado da regra de preços da Anthropic (2 × o input do mesmo modelo
+e faixa de contexto), a mesma que o custo do próprio Claude Code usa, e o
+componente diz que é derivado ([ADR-006](adr/ADR-006-custo-e-ttl-de-cache.md)).
+No smoke real com login por assinatura (uma conta, Haiku, `claude -p`), toda
+escrita de cache foi de 1 h. Um
 modelo fora do catálogo dá custo `unavailable`, nunca `$0`.
 
 ## 4. Fluxo de ferramenta

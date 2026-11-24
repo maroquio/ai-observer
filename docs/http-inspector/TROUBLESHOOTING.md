@@ -70,8 +70,13 @@ conectividade com `api.anthropic.com`.
 
 - O cliente recebe o stream sem buffer (`FlushInterval -1`). Se a interface
   só atualiza no fim, verifique a conexão WebSocket do dashboard (`/ws`).
-- Respostas SSE com `Content-Encoding` são interpretadas ao final: os
-  eventos aparecem sem tempo individual (nota no lifecycle).
+- A API real comprime o stream (gzip) porque o Claude Code envia
+  `Accept-Encoding`. O proxy repassa os bytes comprimidos sem atraso e
+  decodifica a cópia ao final, dando a cada evento a hora de chegada do
+  pedaço da rede que o completou (um limite superior da chegada). Eventos
+  decodificados do mesmo pedaço compartilham esse tempo.
+- Um stream comprimido cortado (conexão encerrada no meio) guarda os
+  eventos decodificados até o corte e marca a troca como degradada.
 
 ## Tool search / `defer_loading`
 
