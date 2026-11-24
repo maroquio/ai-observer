@@ -64,14 +64,14 @@ execução (a captura não foi versionada):
 ### Fase 4 — API e UI
 - [x] Endpoints `/api/http-inspector/*` e `/api/sessions/{id}/http-exchanges`.
 - [x] Tipos gerados (`make api-types`) e OpenAPI.
-- [ ] Aba "Tráfego da API" na sessão, timeline e inspector com 6 abas.
-- [x] Atualização ao vivo via WebSocket existente (mensagem `http_exchanges`; consumo na UI: ver Fase 4 UI).
+- [x] Aba "Tráfego da API" na sessão, timeline e inspector com 6 abas; página HTTP Inspector (`/http-inspector`) com execuções.
+- [x] Atualização ao vivo via WebSocket existente (mensagem `http_exchanges`, consumida pela interface).
 
 ### Fase 5 — Segurança, documentação e entrega
 - [x] Revisão de ameaças (XSS, vazamento de headers, open proxy/SSRF, traversal) — [SECURITY.md](SECURITY.md).
 - [x] Documentação em `docs/http-inspector/`, README e CHANGELOG.
 - [x] Suite completa, `-race`, lint, build e E2E keyless — [TESTING.md](TESTING.md).
-- [x] Verificação com o Claude Code 2.1.331 real contra upstream simulado (sem custo).
+- [x] Verificação com o Claude Code 2.1.331 real contra upstream simulado (sem custo), inclusive na interface (telas em `docs/images/http-inspector-*.png`).
 - [ ] Push da branch para o fork (aguardando autorização do usuário).
 
 ## Definição de pronto (seção 17)
@@ -96,9 +96,9 @@ execução (a captura não foi versionada):
 | D16 Sem dupla contagem | ok | tabelas separadas; comparação por `request_id` |
 | D17 Sessões | ok | evidência de sessão; execuções isoladas; histórico após reinício |
 | D18 Tool flow | ok | vínculos `matched`/`pending`/`unresolved`/`ambiguous`, nota de execução local não observada |
-| D19 Timeline | UI | ver Fase 4 |
-| D20 Inspector | UI | ver Fase 4 |
-| D21 Live updates | UI | WebSocket `http_exchanges` |
+| D19 Timeline | ok | `SessionTrafficTab.test.tsx`, `HttpInspectorPage.test.tsx`; tela `http-inspector-session-traffic.png` |
+| D20 Inspector | ok | seis abas, deep links (`HttpExchangePage.test.tsx`, AC-19), XSS (`xss.test.tsx`, AC-15) |
+| D21 Live updates | ok | WebSocket `http_exchanges` (`useWebSocket.test.ts`) |
 | D22 Privacidade | ok | headers nunca gravados; `safe` padrão; export saneado; loopback |
 | D23 Robustez | ok | falhas de store/blob/parser não afetam o tráfego |
 | D24 Retenção | ok | `TestHTTPCaptureRetention` |
@@ -112,4 +112,4 @@ execução (a captura não foi versionada):
 - Login por assinatura (OAuth claude.ai) via `ANTHROPIC_BASE_URL` não verificado com tráfego real.
 - SSE com `Content-Encoding` interpretado só ao final (sem tempo por evento).
 - O custo de escrita de cache de 1 h fica `partial` enquanto o catálogo não tiver esse preço.
-- Uma sessão vista só pelo proxy não aparece na lista de Sessões (que vem da telemetria); é acessível pela execução.
+- Uma sessão vista só pelo proxy não aparece na lista de Sessões (que vem da telemetria); é acessível pela execução e por `/sessions/{id}?view=traffic`.

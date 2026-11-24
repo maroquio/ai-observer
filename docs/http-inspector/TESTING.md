@@ -111,7 +111,36 @@ passa com `TZ=UTC`.
 `TestSimulatedToolUseConversation`: `tool_use` Read em streaming, resposta
 final com leitura de cache, `count_tokens`, 404 para outros caminhos.
 
-<!-- FRONTEND -->
+### Interface (`frontend/`, Vitest + Testing Library)
+
+Suíte completa: **82 arquivos, 710 testes** (55 novos do inspector; os 655
+anteriores continuam passando). Lint e build limpos.
+
+| Arquivo | Prova |
+|---|---|
+| `components/http-inspector/__tests__/xss.test.tsx` (5) | **AC-15**: `<img onerror>`, `<script>` e `[x](javascript:…)` em request, response, eventos SSE e ferramentas aparecem como texto literal; nenhum `img`/`script`/`iframe`/`[src]` criado, `alert` nunca chamado; um session ID hostil (`javascript:alert(1)`) só gera links internos codificados |
+| `pages/__tests__/HttpExchangePage.test.tsx` (15) | **AC-19**: exchange aberto direto pela URL (como após recarregar), pela rota da sessão e da execução, com a aba na URL; as seis abas (Resumo, Request, Response, SSE Stream, Tokens & Cache, Context Diff), navegação por teclado, valores mascarados marcados, corpo raw só com `full_raw`, ausência de usage, primeiro request sem diff |
+| `components/http-inspector/__tests__/SessionTrafficTab.test.tsx` (8) | aba "Tráfego da API": resumo separado da comparação com a telemetria, todos os tipos de troca (inferência, `count_tokens`, outro endpoint, erro de transporte) com rótulos parcial/redigido/sem usage/não correlacionado, filtros e busca na URL |
+| `components/http-inspector/__tests__/SseTab.test.tsx` (1) | stream de **5.000 eventos**: menos de 100 linhas renderizadas (virtualização) |
+| `components/http-inspector/__tests__/ToolLinks.test.tsx` (3) | `tool_use → tool_result` com links para os dois exchanges; aviso de que a execução local não é observada |
+| `pages/__tests__/HttpInspectorPage.test.tsx` (9) | lista de execuções e status do proxy, filtros na URL, link impresso pelo launcher, renomear, excluir (409 em execução ativa), execução inexistente, proxy desligado com instruções |
+| `lib/httpInspector.test.ts` (9) | rótulos, caminhos (IDs codificados), formatação |
+| `SessionTranscriptPage`, `SessionsPage`, `useWebSocket` (testes acrescentados) | aba de tráfego sem captura e de sessão vista só pelo proxy, contador `httpExchanges` na lista, mensagens `http_exchanges` do WebSocket |
+
+As fixtures (`src/test/httpInspectorFixtures.ts`) são inventadas e não têm
+strings com formato de credencial.
+
+### Telas com tráfego real do Claude Code
+
+As imagens em `docs/images/http-inspector-*.png` foram capturadas na
+interface real com o Claude Code 2.1.331 contra o `fake-anthropic`
+(respostas do modelo simuladas), num diretório neutro (`/tmp/aula-demo`),
+com telemetria OTLP ligada: a comparação da sessão mostrou certeza
+**exata** (2 de 2 `request_id`), proxy e telemetria com 6.624 tokens de
+entrada / 66 de saída, sem soma. Essa verificação encontrou e corrigiu a
+falta dos totais da telemetria na comparação (o lado "Telemetria" aparecia
+como "não informado").
+
 
 ## Verificação com o Claude Code real (sem custo)
 
@@ -155,7 +184,9 @@ proxy, e tráfego contra a API real — ambos exigem conta e geram consumo.
 
 ## Limitações dos testes
 
-- O navegador não é exercitado por testes E2E (Playwright não faz parte da
-  suíte do projeto); a interface é testada com Vitest + Testing Library.
+- O navegador não é exercitado por testes E2E automatizados (Playwright
+  não faz parte da suíte do projeto); a interface é testada com Vitest +
+  Testing Library (jsdom) e foi conferida manualmente num navegador real
+  (telas acima).
 - SSE com `Content-Encoding` é testado quanto ao repasse íntegro; a
   interpretação ocorre ao final, sem tempo por evento.

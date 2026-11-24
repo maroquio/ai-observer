@@ -80,7 +80,32 @@ Safety: the upstream is fixed and validated (no open proxy), the proxy listens o
 
 Try it without an API key or cost against the simulated upstream (`make fake-anthropic`), as described in the [teaching demo](docs/http-inspector/TEACHING_DEMO.md). Documentation (Portuguese): [quick start](docs/http-inspector/QUICKSTART.md), [architecture](docs/http-inspector/ARCHITECTURE.md), [data model](docs/http-inspector/DATA_MODEL.md), [protocol](docs/http-inspector/PROTOCOL.md), [security](docs/http-inspector/SECURITY.md), [troubleshooting](docs/http-inspector/TROUBLESHOOTING.md), [testing](docs/http-inspector/TESTING.md).
 
-<!-- HTTP-INSPECTOR-SCREENSHOTS -->
+The screenshots below show real Claude Code 2.1 traffic sent to the **simulated** upstream (`cmd/fake-anthropic`): the model replies are made up, everything else is what Claude Code sent.
+
+A session's API traffic beside its telemetry (matched by `request_id`, not added up):
+
+![HTTP Inspector: a session's API traffic](docs/images/http-inspector-session-traffic.png)
+
+The `system` blocks, tools and messages actually sent:
+
+![HTTP Inspector: request](docs/images/http-inspector-request.png)
+
+Every server-sent event with its arrival time:
+
+![HTTP Inspector: SSE stream](docs/images/http-inspector-sse.png)
+
+<details>
+<summary>More: tokens and cache, Context Diff, capture runs</summary>
+
+![HTTP Inspector: tokens and cache](docs/images/http-inspector-tokens.png)
+
+![HTTP Inspector: Context Diff](docs/images/http-inspector-context-diff.png)
+
+![HTTP Inspector: a launcher run](docs/images/http-inspector-run.png)
+
+![HTTP Inspector: capture runs](docs/images/http-inspector-runs.png)
+
+</details>
 
 ## Quick Start
 
