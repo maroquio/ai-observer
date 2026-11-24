@@ -1140,6 +1140,118 @@
         ],
         "type": "object"
       },
+      "HTTPInspectorSession": {
+        "description": "HTTPInspectorSession is a session with captured traffic, as the HTTP\nInspector lists it (SessionID \"\" groups the exchanges without a session)",
+        "properties": {
+          "costStatus": {
+            "$ref": "#/components/schemas/HTTPCostStatus"
+          },
+          "costUsd": {
+            "format": "double",
+            "type": "number"
+          },
+          "errors": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "exchanges": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "firstAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "inProgress": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inference": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "lastAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "outputTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "runs": {
+            "description": "Runs is the number of capture runs that carried the session",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the typed prompt of the session's first turn (redacted);\nempty when no turn was found or the capture holds no content",
+            "type": "string"
+          },
+          "totalInputTokens": {
+            "description": "TotalInputTokens and OutputTokens of the model inferences (final and\npartial usage), CostUSD their estimated API-equivalent cost",
+            "format": "int64",
+            "type": "integer"
+          },
+          "turns": {
+            "description": "Turns deduced from the requests (see HTTPSessionTurnsResponse)",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessionId",
+          "firstAt",
+          "lastAt",
+          "exchanges",
+          "inference",
+          "turns",
+          "errors",
+          "inProgress",
+          "totalInputTokens",
+          "outputTokens",
+          "costUsd",
+          "costStatus",
+          "models",
+          "runs"
+        ],
+        "type": "object"
+      },
+      "HTTPInspectorSessionsResponse": {
+        "description": "HTTPInspectorSessionsResponse is a page of the sessions with captured\ntraffic, the most recently active first",
+        "properties": {
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPInspectorSession"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions",
+          "total",
+          "hasMore"
+        ],
+        "type": "object"
+      },
       "HTTPInspectorStatus": {
         "description": "HTTPInspectorStatus describes the HTTP capture proxy (GET\n/api/http-inspector/status). It never contains credentials.",
         "properties": {
@@ -1467,6 +1579,54 @@
         ],
         "description": "HTTPSessionTrafficResponse is the API traffic of a Claude Code session\n(GET /api/sessions/{sessionId}/http-exchanges)"
       },
+      "HTTPSessionTurnsResponse": {
+        "description": "HTTPSessionTurnsResponse is a session's captured traffic grouped into\nturns, deduced from the requests (the API has no turn ID; Note says how)",
+        "properties": {
+          "comparison": {
+            "$ref": "#/components/schemas/HTTPSourceComparison"
+          },
+          "note": {
+            "type": "string"
+          },
+          "preamble": {
+            "$ref": "#/components/schemas/HTTPTurn",
+            "description": "Preamble holds the exchanges before the first turn (startup checks,\nthe quota probe); nil when there are none"
+          },
+          "runs": {
+            "description": "Runs that carried the session's exchanges",
+            "items": {
+              "$ref": "#/components/schemas/HTTPCaptureRun"
+            },
+            "type": "array"
+          },
+          "sessionId": {
+            "description": "SessionID is \"\" for the exchanges without a session",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HTTPTrafficSummary"
+          },
+          "truncated": {
+            "description": "Truncated is true when the session has more exchanges than are\ngrouped (the newest are left out; Summary counts all of them)",
+            "type": "boolean"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPTurn"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessionId",
+          "summary",
+          "runs",
+          "turns",
+          "truncated",
+          "note"
+        ],
+        "type": "object"
+      },
       "HTTPSourceComparison": {
         "description": "HTTPSourceComparison sets the proxy's usage of a session beside what\nOTLP and session files recorded, without adding them up",
         "properties": {
@@ -1780,6 +1940,94 @@
           "durationMs",
           "models",
           "degraded"
+        ],
+        "type": "object"
+      },
+      "HTTPTurn": {
+        "description": "HTTPTurn is a turn of a session's captured traffic: a typed prompt and\nthe exchanges until the next one (the tool loop's requests, subagents,\ncount_tokens and other auxiliary calls, by start time). Numbers follow\nHTTPTrafficSummary: errors leave out quota probes, tokens and cost come\nfrom model inferences, final usage apart from partial.",
+        "properties": {
+          "auxiliary": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "costStatus": {
+            "$ref": "#/components/schemas/HTTPCostStatus"
+          },
+          "costUsd": {
+            "format": "double",
+            "type": "number"
+          },
+          "durationMs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "endedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "errors": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "exchanges": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPExchange"
+            },
+            "type": "array"
+          },
+          "index": {
+            "description": "Index is 1-based; 0 is the preamble (exchanges before the first turn)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "inference": {
+            "description": "Inference counts the model inferences, Auxiliary the other exchanges",
+            "format": "int64",
+            "type": "integer"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "partialTokens": {
+            "$ref": "#/components/schemas/HTTPTokenTotals"
+          },
+          "prompt": {
+            "description": "Prompt is the start of the typed text (redacted); empty for the\npreamble and when the capture holds no content (metadata_only, or\ncaptured by an earlier version)",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/HTTPTokenTotals"
+          },
+          "toolUses": {
+            "description": "ToolUses are the tools the model requested, in order",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "index",
+          "startedAt",
+          "endedAt",
+          "durationMs",
+          "exchanges",
+          "inference",
+          "auxiliary",
+          "errors",
+          "toolUses",
+          "tokens",
+          "partialTokens",
+          "costUsd",
+          "costStatus",
+          "models"
         ],
         "type": "object"
       },
@@ -4329,6 +4577,11 @@
             ]
           },
           "contextManagement": {},
+          "lastUserIndex": {
+            "description": "LastUserIndex is the index of the last message with role user (nil\nwithout one). Claude Code puts a role system message after the first\nprompt, so the last user message is not always the last message.",
+            "format": "int64",
+            "type": "integer"
+          },
           "maxTokens": {
             "format": "int64",
             "type": "integer"
@@ -4342,6 +4595,10 @@
           },
           "outputConfig": {},
           "parseError": {
+            "type": "string"
+          },
+          "prompt": {
+            "description": "Prompt is the text of the last user message when it carries no\ntool_result (a typed prompt), without the text blocks the client\ninjects (\u003csystem-reminder\u003e…), at most 16 KiB; empty otherwise.\nCallers redact it and then cut it with TruncatePrompt before storing.",
             "type": "string"
           },
           "sessionId": {
@@ -4498,7 +4755,7 @@
             "type": "integer"
           },
           "preview": {
-            "description": "Preview is the start of the result's text (at most 300 bytes, cut at\na UTF-8 boundary); callers sanitize it before storing",
+            "description": "Preview is the start of the result's text (at most 8 KiB, cut at a\nUTF-8 boundary); callers redact it and then cut it with\nTruncatePreview (300 bytes) before storing",
             "type": "string"
           },
           "toolUseId": {
@@ -6634,6 +6891,141 @@
           }
         },
         "summary": "A run's tool uses and the requests that carried their results",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/sessions": {
+      "get": {
+        "operationId": "getApiHttpInspectorSessions",
+        "parameters": [
+          {
+            "description": "Page size; larger values are reduced to the maximum",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "nextCursor of the previous page",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Rows to skip (deprecated: page with cursor)",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPInspectorSessionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The query took longer than the request timeout (5 seconds); not worth retrying"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "A page of the sessions with captured traffic, the most recently active first",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/sessions/{sessionId}/turns": {
+      "get": {
+        "description": "Turns are deduced from the requests (the API has no turn ID): a turn starts at a main-conversation request whose last user message carries no tool_result. At most 5,000 exchanges are grouped (truncated).",
+        "operationId": "getApiHttpInspectorSessionsBySessionIdTurns",
+        "parameters": [
+          {
+            "description": "Session ID, or \"none\" for the exchanges without a session",
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPSessionTurnsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "A session's captured traffic grouped into turns",
         "tags": [
           "http-inspector"
         ]

@@ -16,6 +16,7 @@ const SessionTranscriptPage = lazy(() =>
   import('@/pages/SessionTranscriptPage').then((m) => ({ default: m.SessionTranscriptPage }))
 )
 const HttpInspectorPage = lazy(() => import('@/pages/HttpInspectorPage').then((m) => ({ default: m.HttpInspectorPage })))
+const HttpSessionPage = lazy(() => import('@/pages/HttpSessionPage').then((m) => ({ default: m.HttpSessionPage })))
 const HttpRunPage = lazy(() => import('@/pages/HttpRunPage').then((m) => ({ default: m.HttpRunPage })))
 const HttpExchangePage = lazy(() => import('@/pages/HttpExchangePage').then((m) => ({ default: m.HttpExchangePage })))
 const DocsPage = lazy(() => import('@/pages/DocsPage').then((m) => ({ default: m.DocsPage })))
@@ -57,6 +58,7 @@ export function AppRoutes() {
         <Route path="sessions/:sessionId" element={page(<SessionTranscriptPage />)} />
         <Route path="sessions/:sessionId/http-exchanges/:exchangeId" element={page(<HttpExchangePage />)} />
         <Route path="http-inspector" element={page(<HttpInspectorPage />)} />
+        <Route path="http-inspector/sessions/:sessionId" element={page(<HttpSessionPage />)} />
         <Route path="http-inspector/runs/:runId" element={page(<HttpRunPage />)} />
         <Route path="http-inspector/runs/:runId/exchanges/:exchangeId" element={page(<HttpExchangePage />)} />
         <Route path="docs" element={page(<DocsPage />)} />

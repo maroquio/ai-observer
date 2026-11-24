@@ -18,6 +18,7 @@ import (
 	"github.com/tobilg/ai-observer/internal/anthropicwire"
 	"github.com/tobilg/ai-observer/internal/api"
 	"github.com/tobilg/ai-observer/internal/httpcapture"
+	"github.com/tobilg/ai-observer/internal/httpturns"
 	"github.com/tobilg/ai-observer/internal/logger"
 	"github.com/tobilg/ai-observer/internal/storage"
 	"github.com/tobilg/ai-observer/internal/version"
@@ -41,6 +42,9 @@ type HTTPInspectorStore interface {
 	HTTPSessionRuns(ctx context.Context, sessionID string) ([]api.HTTPCaptureRun, error)
 	HTTPSessionTelemetryRequestIDs(ctx context.Context, sessionID string) (map[string]bool, error)
 	HTTPSessionRequestIDs(ctx context.Context, sessionID string) ([]string, error)
+	HTTPSessionTrafficSummary(ctx context.Context, sessionID string) (*api.HTTPTrafficSummary, error)
+	HTTPInspectorSessions(ctx context.Context, page storage.Page) (*api.HTTPInspectorSessionsResponse, error)
+	HTTPSessionTurnExchanges(ctx context.Context, sessionID string, limit int) ([]httpturns.Exchange, bool, error)
 }
 
 var _ HTTPInspectorStore = (*storage.DuckDBStore)(nil)
@@ -372,6 +376,74 @@ func (h *HTTPInspector) SessionExchanges(w http.ResponseWriter, r *http.Request)
 	}
 	resp := api.HTTPSessionTrafficResponse{SessionID: sid, Summary: *sum, Runs: runs, HTTPExchangesResponse: *list}
 	if sum.Inference > 0 {
+		cmp, err := h.comparison(ctx, sid, sum)
+		if err != nil {
+			writeQueryError(w, r, "failed to compare sources", err)
+			return
+		}
+		resp.Comparison = cmp
+	}
+	api.WriteJSON(w, http.StatusOK, resp)
+}
+
+// maxTurnExchanges bounds the exchanges a session's turns are built from
+const maxTurnExchanges = 5000
+
+// ListSessions answers GET /api/http-inspector/sessions
+func (h *HTTPInspector) ListSessions(w http.ResponseWriter, r *http.Request) {
+	p := newParams(r)
+	page := p.PageOf(25, 100)
+	if !p.Valid(w) {
+		return
+	}
+	resp, err := h.store.HTTPInspectorSessions(r.Context(), page)
+	if err != nil {
+		writeQueryError(w, r, "failed to load sessions", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, resp)
+}
+
+// SessionTurns answers GET /api/http-inspector/sessions/{sessionId}/turns
+// ("none": the exchanges without a session)
+func (h *HTTPInspector) SessionTurns(w http.ResponseWriter, r *http.Request) {
+	sid := chi.URLParam(r, "sessionId")
+	if sid == api.HTTPNoSession {
+		sid = ""
+	}
+	ctx := r.Context()
+	sum, err := h.store.HTTPSessionTrafficSummary(ctx, sid)
+	if err != nil {
+		writeQueryError(w, r, "failed to summarize exchanges", err)
+		return
+	}
+	if sum.Exchanges == 0 {
+		api.WriteError(w, http.StatusNotFound, "no captured traffic for this session")
+		return
+	}
+	runs, err := h.store.HTTPSessionRuns(ctx, sid)
+	if err != nil {
+		writeQueryError(w, r, "failed to load capture runs", err)
+		return
+	}
+	exchanges, truncated, err := h.store.HTTPSessionTurnExchanges(ctx, sid, maxTurnExchanges)
+	if err != nil {
+		writeQueryError(w, r, "failed to load exchanges", err)
+		return
+	}
+	preamble, groups := httpturns.Group(exchanges)
+	resp := api.HTTPSessionTurnsResponse{
+		SessionID: sid, Summary: *sum, Runs: runs, Turns: make([]api.HTTPTurn, 0, len(groups)),
+		Truncated: truncated, Note: httpturns.Note,
+	}
+	if len(preamble) > 0 {
+		p := httpturns.Summarize(0, "", preamble)
+		resp.Preamble = &p
+	}
+	for i, g := range groups {
+		resp.Turns = append(resp.Turns, httpturns.Summarize(i+1, g.Prompt, g.Exchanges))
+	}
+	if sid != "" && sum.Inference > 0 {
 		cmp, err := h.comparison(ctx, sid, sum)
 		if err != nil {
 			writeQueryError(w, r, "failed to compare sources", err)

@@ -171,6 +171,8 @@ export const queryKeys = {
     runExchanges: (runId: string, filters: HTTPExchangeFilters) => ['http-inspector', 'run', runId, 'exchanges', clean(filters)] as const,
     runTools: (runId: string) => ['http-inspector', 'run', runId, 'tools'] as const,
     sessions: ['http-inspector', 'session'] as const,
+    inspectorSessions: ['http-inspector', 'sessions'] as const,
+    sessionTurns: (sessionId: string) => ['http-inspector', 'session', sessionId, 'turns'] as const,
     session: (sessionId: string) => ['http-inspector', 'session', sessionId] as const,
     sessionSummary: (sessionId: string) => ['http-inspector', 'session', sessionId, 'summary'] as const,
     sessionExchanges: (sessionId: string, filters: HTTPExchangeFilters) =>
@@ -436,6 +438,8 @@ export function useTranscriptSearch(sessionId: string, search: string, options: 
 export const HTTP_EXCHANGES_PAGE_SIZE = 500
 export const HTTP_EVENTS_PAGE_SIZE = 1000
 export const HTTP_RUNS_PAGE_SIZE = 50
+// Sessions per page of the HTTP Inspector's session list
+export const HTTP_SESSIONS_PAGE_SIZE = 25
 
 function nextCursor(last: { hasMore: boolean; nextCursor?: string }): string | undefined {
   return last.hasMore && last.nextCursor ? last.nextCursor : undefined
@@ -458,6 +462,26 @@ export function useHTTPCaptureRuns(filters: HTTPRunFilters = {}, options: QueryO
       api.getHTTPCaptureRuns({ ...clean(filters), limit: HTTP_RUNS_PAGE_SIZE, cursor: pageParam }, { signal }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: nextCursor,
+    ...options,
+  })
+}
+
+/** Sessions with captured traffic, a page at a time (data.pages[i].sessions) */
+export function useHTTPInspectorSessions(options: QueryOptions = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.httpInspector.inspectorSessions,
+    queryFn: ({ signal, pageParam }) => api.getHTTPInspectorSessions({ limit: HTTP_SESSIONS_PAGE_SIZE, cursor: pageParam }, { signal }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextCursor,
+    ...options,
+  })
+}
+
+/** A session's captured traffic grouped into turns ('' for the exchanges without a session) */
+export function useHTTPSessionTurns(sessionId: string, options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.sessionTurns(sessionId),
+    queryFn: ({ signal }) => api.getHTTPSessionTurns(sessionId, { signal }),
     ...options,
   })
 }

@@ -518,6 +518,93 @@ type HTTPSessionTrafficResponse struct {
 	HTTPExchangesResponse
 }
 
+// HTTPNoSession stands for the exchanges without a session in the HTTP
+// Inspector's session paths (/api/http-inspector/sessions/none/turns)
+const HTTPNoSession = "none"
+
+// HTTPInspectorSession is a session with captured traffic, as the HTTP
+// Inspector lists it (SessionID "" groups the exchanges without a session)
+type HTTPInspectorSession struct {
+	SessionID string `json:"sessionId"`
+	// Title is the typed prompt of the session's first turn (redacted);
+	// empty when no turn was found or the capture holds no content
+	Title     string    `json:"title,omitempty"`
+	FirstAt   time.Time `json:"firstAt"`
+	LastAt    time.Time `json:"lastAt"`
+	Exchanges int64     `json:"exchanges"`
+	Inference int64     `json:"inference"`
+	// Turns deduced from the requests (see HTTPSessionTurnsResponse)
+	Turns      int64 `json:"turns"`
+	Errors     int64 `json:"errors"`
+	InProgress int64 `json:"inProgress"`
+	// TotalInputTokens and OutputTokens of the model inferences (final and
+	// partial usage), CostUSD their estimated API-equivalent cost
+	TotalInputTokens int64    `json:"totalInputTokens"`
+	OutputTokens     int64    `json:"outputTokens"`
+	CostUSD          float64  `json:"costUsd"`
+	CostStatus       string   `json:"costStatus"`
+	Models           []string `json:"models"`
+	// Runs is the number of capture runs that carried the session
+	Runs int64 `json:"runs"`
+}
+
+// HTTPInspectorSessionsResponse is a page of the sessions with captured
+// traffic, the most recently active first
+type HTTPInspectorSessionsResponse struct {
+	Sessions   []HTTPInspectorSession `json:"sessions"`
+	Total      int64                  `json:"total"`
+	HasMore    bool                   `json:"hasMore"`
+	NextCursor string                 `json:"nextCursor,omitempty"`
+}
+
+// HTTPTurn is a turn of a session's captured traffic: a typed prompt and
+// the exchanges until the next one (the tool loop's requests, subagents,
+// count_tokens and other auxiliary calls, by start time). Numbers follow
+// HTTPTrafficSummary: errors leave out quota probes, tokens and cost come
+// from model inferences, final usage apart from partial.
+type HTTPTurn struct {
+	// Index is 1-based; 0 is the preamble (exchanges before the first turn)
+	Index int `json:"index"`
+	// Prompt is the start of the typed text (redacted); empty for the
+	// preamble and when the capture holds no content (metadata_only, or
+	// captured by an earlier version)
+	Prompt     string         `json:"prompt,omitempty"`
+	StartedAt  time.Time      `json:"startedAt"`
+	EndedAt    time.Time      `json:"endedAt"`
+	DurationMs int64          `json:"durationMs"`
+	Exchanges  []HTTPExchange `json:"exchanges"`
+	// Inference counts the model inferences, Auxiliary the other exchanges
+	Inference int64 `json:"inference"`
+	Auxiliary int64 `json:"auxiliary"`
+	Errors    int64 `json:"errors"`
+	// ToolUses are the tools the model requested, in order
+	ToolUses      []string        `json:"toolUses"`
+	Tokens        HTTPTokenTotals `json:"tokens"`
+	PartialTokens HTTPTokenTotals `json:"partialTokens"`
+	CostUSD       float64         `json:"costUsd"`
+	CostStatus    string          `json:"costStatus"`
+	Models        []string        `json:"models"`
+}
+
+// HTTPSessionTurnsResponse is a session's captured traffic grouped into
+// turns, deduced from the requests (the API has no turn ID; Note says how)
+type HTTPSessionTurnsResponse struct {
+	// SessionID is "" for the exchanges without a session
+	SessionID string             `json:"sessionId"`
+	Summary   HTTPTrafficSummary `json:"summary"`
+	// Runs that carried the session's exchanges
+	Runs       []HTTPCaptureRun      `json:"runs"`
+	Comparison *HTTPSourceComparison `json:"comparison,omitempty"`
+	// Preamble holds the exchanges before the first turn (startup checks,
+	// the quota probe); nil when there are none
+	Preamble *HTTPTurn  `json:"preamble,omitempty"`
+	Turns    []HTTPTurn `json:"turns"`
+	// Truncated is true when the session has more exchanges than are
+	// grouped (the newest are left out; Summary counts all of them)
+	Truncated bool   `json:"truncated"`
+	Note      string `json:"note"`
+}
+
 // HTTPRunDetail is a run with its summary
 type HTTPRunDetail struct {
 	Run     HTTPCaptureRun     `json:"run"`

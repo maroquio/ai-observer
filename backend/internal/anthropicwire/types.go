@@ -271,8 +271,9 @@ type ToolResultRef struct {
 	BlockIndex   int    `json:"blockIndex"`
 	// ContentBytes is the size of the block's content JSON
 	ContentBytes int `json:"contentBytes"`
-	// Preview is the start of the result's text (at most 300 bytes, cut at
-	// a UTF-8 boundary); callers sanitize it before storing
+	// Preview is the start of the result's text (at most 8 KiB, cut at a
+	// UTF-8 boundary); callers redact it and then cut it with
+	// TruncatePreview (300 bytes) before storing
 	Preview string `json:"preview,omitempty"`
 }
 
@@ -311,6 +312,15 @@ type RequestSummary struct {
 	Messages MessagesSummary `json:"messages"`
 
 	ToolResults []ToolResultRef `json:"toolResults"`
+	// LastUserIndex is the index of the last message with role user (nil
+	// without one). Claude Code puts a role system message after the first
+	// prompt, so the last user message is not always the last message.
+	LastUserIndex *int `json:"lastUserIndex,omitempty"`
+	// Prompt is the text of the last user message when it carries no
+	// tool_result (a typed prompt), without the text blocks the client
+	// injects (<system-reminder>…), at most 16 KiB; empty otherwise.
+	// Callers redact it and then cut it with TruncatePrompt before storing.
+	Prompt string `json:"prompt,omitempty"`
 	// ToolUses are the tool_use blocks in the request's history
 	ToolUses []ToolUseRef `json:"toolUses"`
 

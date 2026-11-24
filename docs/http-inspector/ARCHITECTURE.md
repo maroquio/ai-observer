@@ -47,7 +47,8 @@ flowchart LR
 | `internal/anthropicwire` | Parser puro do protocolo: classificação de endpoint, parser SSE incremental, reconstrução da mensagem, `usage` (cumulativo), resumo do request (`system`, `tools`, `messages`, breakpoints de cache, sessão), `tool_use`/`tool_result`, frases didáticas, Context Diff, decodificação gzip/deflate/br/zstd |
 | `internal/httpproxy` | Reverse proxy (`httputil.ReverseProxy`) com upstream fixo validado, listener compartilhado e um listener por execução do launcher |
 | `internal/httpcapture` | Observação não bloqueante dos corpos, worker por exchange, saneamento, gravação dos corpos, custo, vínculo de ferramentas e pipeline de escrita |
-| `internal/storage/http_capture_*.go` | Tabelas, escrita em lotes e consultas |
+| `internal/httpturns` | Agrupa as trocas de uma sessão em turnos (dedução, sem I/O) e resume cada turno |
+| `internal/storage/http_capture_*.go` | Tabelas, escrita em lotes e consultas (`http_capture_sessions.go`: lista de sessões e linhas para os turnos) |
 | `internal/handlers/http_inspector.go` | API REST `/api/http-inspector/*` e `/api/sessions/{id}/http-exchanges` |
 | `cmd/server/cmd_run.go` | `ai-observer run -- claude` |
 | `cmd/fake-anthropic` | Upstream simulado para demonstrações e testes sem chave |
@@ -121,6 +122,35 @@ A sessão de cada exchange vem, em ordem:
 O ID é o mesmo que o OTLP (`session.id`) e os arquivos JSONL usam, por isso
 a aba "Tráfego da API" aparece na sessão já existente. A evidência usada é
 gravada e mostrada na interface.
+
+## Turnos
+
+O fio não tem ID de turno: `internal/httpturns` deduz os turnos das trocas
+de uma sessão, em ordem de início, a partir do resumo do request
+(`request_summary`: hash do `system`, hashes das mensagens, `lastUserIndex`,
+índices dos `tool_result`, `prompt`).
+
+- **Conversa principal**: inferências com ferramentas cuja `system` (sha256)
+  ou primeira mensagem é a de uma request principal anterior; a primeira
+  inferência com ferramentas inicia a conversa. Subagentes têm system prompt
+  e primeira mensagem próprios; geração de título vai sem ferramentas; a sonda
+  de cota tem `max_tokens` 1. Todas entram no turno em andamento.
+- **Início de turno**: uma request principal cuja última mensagem do usuário
+  (`lastUserIndex`, porque na primeira request do Claude Code 2.1 a última
+  mensagem é uma mensagem `system` de ambiente) não tem `tool_result`, e que
+  não é retry (`RetryCount > 0`, ou mesmo número de mensagens e mesmo hash da
+  última que a request principal anterior).
+- Trocas antes do primeiro turno formam o preâmbulo (índice 0).
+- `prompt` são os blocos de texto da última mensagem do usuário que não
+  começam com `<system-reminder>`, redigidos e cortados em 1.000 bytes; vazio
+  em `metadata_only`. Capturas anteriores não têm `prompt` nem
+  `lastUserIndex` (usa-se a última mensagem).
+- Os números de cada turno seguem o resumo de tráfego: erros sem a sonda de
+  cota, tokens e custo só de `model_inference`, uso parcial à parte.
+- `GET /api/http-inspector/sessions` lista as sessões (as trocas sem sessão
+  são a linha `sessionId: ""`) e `GET /api/http-inspector/sessions/{id}/turns`
+  (`none` para as sem sessão) devolve resumo, execuções, comparação,
+  preâmbulo e turnos de até 5.000 trocas (`truncated` além disso).
 
 ## Deduplicação entre fontes
 

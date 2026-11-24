@@ -19,12 +19,40 @@ var KnownRequestFields = []string{
 	"mcp_servers", "container", "service_tier",
 }
 
-// MaxPreviewBytes is the size limit of ToolResultRef.Preview
+// MaxPreviewBytes is the size limit of a stored tool result preview
+// (TruncatePreview)
 const MaxPreviewBytes = 300
 
+// MaxPromptBytes is the size limit of a stored prompt (TruncatePrompt)
+const MaxPromptBytes = 1000
+
+// The parser keeps more of the prompt and of each tool result's text than is
+// stored, so that redaction, which runs before they are cut, sees a secret
+// crossing the stored limit whole (its rules need the whole shape: a PEM
+// key's END line, a JWT's three segments)
+const (
+	maxPromptSourceBytes  = 16 << 10
+	maxPreviewSourceBytes = 8 << 10
+)
+
+// TruncatePrompt cuts a redacted prompt to MaxPromptBytes
+func TruncatePrompt(p string) string {
+	return truncateUTF8(p, MaxPromptBytes)
+}
+
+// TruncatePreview cuts a redacted tool result preview to MaxPreviewBytes
+func TruncatePreview(p string) string {
+	return truncateUTF8(p, MaxPreviewBytes)
+}
+
+// injectedTextPrefix starts the text blocks Claude Code adds to user
+// messages (context, reminders), which are not what the user typed
+const injectedTextPrefix = "<system-reminder>"
+
 // previewRawBytes is how much of an encoded string is decoded to build a
-// preview: enough for MaxPreviewBytes even when every character is escaped
-const previewRawBytes = 4096
+// preview: enough for maxPreviewSourceBytes even when every character is
+// escaped (\uXXXX)
+const previewRawBytes = maxPreviewSourceBytes * 6
 
 // ParseRequest summarizes a POST /v1/messages (or count_tokens) body in one
 // pass over it. Sizes and hashes are those of each value's bytes as sent:
@@ -138,6 +166,8 @@ func (s *RequestSummary) readMessages(raw []byte) {
 		return
 	}
 	s.Messages.Bytes = len(raw)
+	lastUser := -1
+	var lastUserContent []byte
 	forEachElem(raw, func(i int, msg []byte) {
 		sum := sha256.Sum256(withoutCacheControl(msg))
 		s.Messages.Hashes = append(s.Messages.Hashes, hex.EncodeToString(sum[:8]))
@@ -153,6 +183,9 @@ func (s *RequestSummary) readMessages(raw []byte) {
 			}
 		})
 		s.Messages.Roles[countKey(role)]++
+		if role == "user" {
+			lastUser, lastUserContent = i, content
+		}
 		switch {
 		case len(content) > 0 && content[0] == '"':
 			s.Messages.Blocks["text"]++
@@ -163,6 +196,62 @@ func (s *RequestSummary) readMessages(raw []byte) {
 		}
 	})
 	s.Messages.Count = len(s.Messages.Hashes)
+	if lastUser >= 0 {
+		s.LastUserIndex = &lastUser
+		if !s.hasToolResultIn(lastUser) {
+			s.Prompt = promptText(lastUserContent)
+		}
+	}
+}
+
+// hasToolResultIn tells whether message i has a tool_result block
+func (s *RequestSummary) hasToolResultIn(i int) bool {
+	for _, r := range s.ToolResults {
+		if r.MessageIndex == i {
+			return true
+		}
+	}
+	return false
+}
+
+// promptText is the typed text of a user message's content (a string, or
+// its text blocks except injected ones, joined by blank lines), at most
+// maxPromptSourceBytes
+func promptText(content []byte) string {
+	const rawLimit = maxPromptSourceBytes * 6
+	if len(content) == 0 {
+		return ""
+	}
+	if content[0] == '"' {
+		return truncateUTF8(strings.TrimSpace(stringPrefix(content, rawLimit)), maxPromptSourceBytes)
+	}
+	var parts []string
+	size := 0
+	forEachElem(content, func(_ int, block []byte) {
+		if size > maxPromptSourceBytes {
+			return
+		}
+		var typ string
+		var text []byte
+		forEachMember(block, func(key string, val []byte) {
+			switch key {
+			case "type":
+				typ = rawString(val)
+			case "text":
+				text = val
+			}
+		})
+		if typ != "text" {
+			return
+		}
+		t := strings.TrimSpace(stringPrefix(text, rawLimit))
+		if t == "" || strings.HasPrefix(t, injectedTextPrefix) {
+			return
+		}
+		parts = append(parts, t)
+		size += len(t)
+	})
+	return truncateUTF8(strings.Join(parts, "\n\n"), maxPromptSourceBytes)
 }
 
 // readContentBlock reads block j of message i
@@ -234,12 +323,12 @@ func (s *RequestSummary) readToolResultContent(content []byte, loc string) strin
 					s.addBreakpoint(val, loc, k, "]")
 				}
 			})
-			if typ == "text" && text.Len() <= MaxPreviewBytes {
+			if typ == "text" && text.Len() <= maxPreviewSourceBytes {
 				text.WriteString(stringPrefix(blockText, previewRawBytes))
 			}
 		})
 	}
-	return truncateUTF8(text.String(), MaxPreviewBytes)
+	return truncateUTF8(text.String(), maxPreviewSourceBytes)
 }
 
 // addBreakpoint records a cache_control value (an object) found at the

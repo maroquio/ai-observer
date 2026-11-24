@@ -13,6 +13,7 @@ import {
   exchangeFiltersFromValues,
   exchangePath,
   hasExchangeFilters,
+  inspectorSessionPath,
   runPath,
 } from '@/lib/httpInspector'
 import { useSessionExchanges, useSessionToolLinks, useSessionTrafficSummary } from '@/lib/queries'
@@ -87,6 +88,13 @@ export function SessionTrafficTab({ sessionId, url }: SessionTrafficTabProps) {
         allLoaded={!exchanges.hasNextPage && !hasExchangeFilters(values)}
         runs={runs}
       />
+
+      <p className="text-sm">
+        <Link to={inspectorSessionPath(sessionId)} className="font-medium underline underline-offset-4">
+          Ver por turnos no HTTP Inspector
+        </Link>
+        <span className="text-muted-foreground"> — cada prompt com as requisições e respostas que vieram dele</span>
+      </p>
 
       {runs.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm">

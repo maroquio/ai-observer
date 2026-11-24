@@ -37,6 +37,16 @@ inclui a variante raw.
 - Banco DuckDB do AI Observer (tabelas `http_capture_*`).
 - Corpos em `AI_OBSERVER_HTTP_CAPTURE_DIR` (padrão `http-captures` ao lado do
   banco), diretórios `0700`, arquivos `0600`.
+- Trechos de texto também ficam no banco: o prompt digitado, no resumo da
+  request (`request_summary.prompt`, para os turnos e o título da sessão, no
+  máximo 1.000 bytes), e o início de cada `tool_result`
+  (`request_summary.toolResults[].preview` e
+  `http_capture_tool_links.result_preview`, no máximo 300 bytes). Os dois são
+  redigidos **antes** do corte: o parser guarda até 16 KiB do prompt e 8 KiB
+  de cada resultado, então um segredo que atravessa o limite (uma chave PEM
+  precisa da linha END, um JWT dos três segmentos) é reconhecido inteiro.
+  Vazios em `metadata_only`. Retenção e limite de armazenamento apagam a
+  execução inteira, linhas e arquivos.
 - Nada é enviado a serviços externos; o proxy só fala com o upstream fixo.
 - Execuções podem ser apagadas individualmente (banco e arquivos).
 

@@ -1,17 +1,19 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ChevronRight, Network } from 'lucide-react'
+import { AlertTriangle, ChevronRight, MessagesSquare, Network } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopyButton } from '@/components/common/copy-button'
 import { ListSkeleton, Refreshing } from '@/components/common/list-skeleton'
 import { FilterBar } from '@/components/common/list-filters'
 import { PageHeader } from '@/components/common/page-header'
 import { QueryError } from '@/components/common/query-error'
 import { CaptureHelp } from '@/components/http-inspector/CaptureHelp'
+import { InspectorSessionList } from '@/components/http-inspector/InspectorSessionList'
 import { Fields } from '@/components/http-inspector/primitives'
 import { useLiveInvalidate } from '@/hooks/useLiveInvalidate'
 import { useUrlFilters, useUrlWriter } from '@/hooks/useUrlState'
@@ -23,13 +25,14 @@ import { cn, formatTimestamp } from '@/lib/utils'
 import { useTelemetryStore } from '@/stores/telemetryStore'
 import type { HTTPCaptureRun, HTTPInspectorStatus } from '@/types/httpInspector'
 
-// URL parameters of the run filters
-const FILTER_DEFAULTS = { mode: '', state: '' }
+// URL parameters: the tab (sessions or capture runs) and the run filters
+const FILTER_DEFAULTS = { tab: 'sessions', mode: '', state: '' }
 
-/** /http-inspector: the capture proxy's status and the capture runs */
+/** /http-inspector: the capture proxy's status, the captured sessions (by turns) and the capture runs */
 export function HttpInspectorPage() {
   const url = useUrlWriter()
   const [values, setValues] = useUrlFilters(FILTER_DEFAULTS, url)
+  const tab = values.tab === 'runs' ? 'runs' : 'sessions'
   const filters = useMemo<HTTPRunFilters>(
     () => ({
       mode: values.mode === 'manual' || values.mode === 'launcher' ? values.mode : undefined,
@@ -38,13 +41,13 @@ export function HttpInspectorPage() {
     [values],
   )
   const status = useHTTPInspectorStatus()
-  const runs = useHTTPCaptureRuns(filters)
+  const runs = useHTTPCaptureRuns(filters, { enabled: tab === 'runs' })
   const rows = useMemo(() => runs.data?.pages.flatMap((p) => p.runs ?? []) ?? [], [runs.data])
   const total = runs.data?.pages[runs.data.pages.length - 1]?.total ?? rows.length
 
   const updateCount = useTelemetryStore((s) => s.httpExchangesUpdateCount)
   useLiveInvalidate({
-    queryKey: [queryKeys.httpInspector.runs, queryKeys.httpInspector.status],
+    queryKey: [queryKeys.httpInspector.runs, queryKeys.httpInspector.status, queryKeys.httpInspector.inspectorSessions],
     enabled: true,
     intervalMs: 30_000,
     updateCount,
@@ -102,32 +105,56 @@ export function HttpInspectorPage() {
         <ProxyStatusCard status={status.data} />
       )}
 
-      <Card>
-        <CardHeader className="space-y-4">
-          <CardTitle className="flex items-center gap-2">
-            <Network className="h-5 w-5" aria-hidden="true" />
-            Execuções de captura
-          </CardTitle>
-          <FilterBar>
-            <div className="w-full md:w-64 *:w-full">
-              <NativeSelect aria-label="Modo da execução" className="h-10" value={values.mode} onChange={(e) => setValues({ mode: e.target.value })}>
-                <NativeSelectOption value="">Todos os modos</NativeSelectOption>
-                <NativeSelectOption value="launcher">{RUN_MODE_LABELS.launcher}</NativeSelectOption>
-                <NativeSelectOption value="manual">{RUN_MODE_LABELS.manual}</NativeSelectOption>
-              </NativeSelect>
-            </div>
-            <div className="w-full md:w-48 *:w-full">
-              <NativeSelect aria-label="Estado da execução" className="h-10" value={values.state} onChange={(e) => setValues({ state: e.target.value })}>
-                <NativeSelectOption value="">Todos os estados</NativeSelectOption>
-                <NativeSelectOption value="active">{RUN_STATE_LABELS.active}</NativeSelectOption>
-                <NativeSelectOption value="finished">{RUN_STATE_LABELS.finished}</NativeSelectOption>
-                <NativeSelectOption value="interrupted">{RUN_STATE_LABELS.interrupted}</NativeSelectOption>
-              </NativeSelect>
-            </div>
-          </FilterBar>
-        </CardHeader>
-        <CardContent>{content}</CardContent>
-      </Card>
+      <Tabs value={tab} onValueChange={(next) => setValues({ tab: next })}>
+        <TabsList aria-label="Visões do HTTP Inspector">
+          <TabsTrigger value="sessions">Sessões</TabsTrigger>
+          <TabsTrigger value="runs">Execuções de captura</TabsTrigger>
+        </TabsList>
+        <TabsContent value="sessions" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessagesSquare className="h-5 w-5" aria-hidden="true" />
+                Sessões
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Cada sessão do Claude Code com o tráfego capturado, dividido em turnos: um prompt e as requisições que vieram dele.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <InspectorSessionList />
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="runs" className="mt-4">
+          <Card>
+            <CardHeader className="space-y-4">
+              <CardTitle className="flex items-center gap-2">
+                <Network className="h-5 w-5" aria-hidden="true" />
+                Execuções de captura
+              </CardTitle>
+              <FilterBar>
+                <div className="w-full md:w-64 *:w-full">
+                  <NativeSelect aria-label="Modo da execução" className="h-10" value={values.mode} onChange={(e) => setValues({ mode: e.target.value })}>
+                    <NativeSelectOption value="">Todos os modos</NativeSelectOption>
+                    <NativeSelectOption value="launcher">{RUN_MODE_LABELS.launcher}</NativeSelectOption>
+                    <NativeSelectOption value="manual">{RUN_MODE_LABELS.manual}</NativeSelectOption>
+                  </NativeSelect>
+                </div>
+                <div className="w-full md:w-48 *:w-full">
+                  <NativeSelect aria-label="Estado da execução" className="h-10" value={values.state} onChange={(e) => setValues({ state: e.target.value })}>
+                    <NativeSelectOption value="">Todos os estados</NativeSelectOption>
+                    <NativeSelectOption value="active">{RUN_STATE_LABELS.active}</NativeSelectOption>
+                    <NativeSelectOption value="finished">{RUN_STATE_LABELS.finished}</NativeSelectOption>
+                    <NativeSelectOption value="interrupted">{RUN_STATE_LABELS.interrupted}</NativeSelectOption>
+                  </NativeSelect>
+                </div>
+              </FilterBar>
+            </CardHeader>
+            <CardContent>{content}</CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

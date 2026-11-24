@@ -324,6 +324,30 @@ func TestHTTPInspectorEndToEnd(t *testing.T) {
 	c.do(http.MethodGet, "/api/http-inspector/runs/"+runID+"/exchanges?kind=bogus", nil, http.StatusBadRequest, "ErrorResponse")
 	c.do(http.MethodDelete, "/api/http-inspector/runs/"+runID, nil, http.StatusConflict, "ErrorResponse")
 
+	// The session's turns (deduced): "olá" and "use a tool"; the
+	// count_tokens sent before the second prompt is in the first turn, the
+	// tool loop's request in the second; turn tokens add up to the summary
+	sessions := decode[api.HTTPInspectorSessionsResponse](t, c.get("/api/http-inspector/sessions", "HTTPInspectorSessionsResponse"))
+	if sessions.Total != 1 || len(sessions.Sessions) != 1 || sessions.Sessions[0].SessionID != e2eSession || sessions.Sessions[0].Turns != 2 ||
+		sessions.Sessions[0].Title != "olá" || sessions.Sessions[0].Exchanges != 4 || sessions.Sessions[0].Inference != 3 ||
+		sessions.Sessions[0].OutputTokens != 5+40+30 || sessions.Sessions[0].Runs != 1 || sessions.Sessions[0].CostStatus != api.CostComplete {
+		t.Fatalf("sessions %+v", sessions)
+	}
+	turns := decode[api.HTTPSessionTurnsResponse](t, c.get("/api/http-inspector/sessions/"+e2eSession+"/turns", "HTTPSessionTurnsResponse"))
+	if turns.Preamble != nil || len(turns.Turns) != 2 || turns.Note == "" || turns.Truncated || len(turns.Runs) != 1 {
+		t.Fatalf("turns %+v", turns)
+	}
+	first, second := turns.Turns[0], turns.Turns[1]
+	if first.Index != 1 || first.Prompt != "olá" || len(first.Exchanges) != 2 || first.Exchanges[1].Kind != "token_count" || first.Auxiliary != 1 ||
+		second.Index != 2 || second.Prompt != "use a tool" || len(second.Exchanges) != 2 || second.Inference != 2 ||
+		len(second.ToolUses) != 1 || second.ToolUses[0] != "Read" ||
+		first.Tokens.Output+second.Tokens.Output != turns.Summary.Tokens.Output ||
+		first.Tokens.TotalInput+second.Tokens.TotalInput != turns.Summary.Tokens.TotalInput {
+		t.Fatalf("turns %+v / %+v", first, second)
+	}
+	c.do(http.MethodGet, "/api/http-inspector/sessions/none/turns", nil, http.StatusNotFound, "ErrorResponse")
+	c.do(http.MethodGet, "/api/http-inspector/sessions?limit=0", nil, http.StatusBadRequest, "ErrorResponse")
+
 	// The session's traffic, compared with its telemetry (AC-08): the same
 	// request seen by OTLP is matched, never added up
 	if err := s.storage.InsertTelemetry(context.Background(), []api.LogRecord{{

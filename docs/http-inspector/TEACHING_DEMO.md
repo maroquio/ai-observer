@@ -47,7 +47,9 @@ AI_OBSERVER_HTTP_PROXY_UPSTREAM=http://127.0.0.1:9787 ai-observer serve --http-p
 Real: só `ai-observer serve --http-proxy`.
 
 Abra `http://127.0.0.1:8080/http-inspector`: o status mostra proxy ligado,
-modo `safe`, upstream.
+modo `safe`, upstream. Depois da demonstração, a aba **Sessões** mostra a
+mesma conversa organizada em turnos (cada prompt com as trocas que vieram
+dele); a aba **Execuções de captura** leva às execuções.
 
 ## 2. Iniciar o Claude Code pelo proxy sem mexer na autenticação (1 min)
 

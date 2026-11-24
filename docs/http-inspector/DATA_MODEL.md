@@ -51,7 +51,10 @@ Tamanhos: `request_bytes`, `response_bytes` (no fio), `sse_events`.
 
 Semântica: `headline` (frase determinística), `observations` (frases com
 evidência), `tool_uses`, `tool_results`, `request_summary` (resumo
-estruturado: `system`, `tools`, `messages`, breakpoints, parâmetros),
+estruturado: `system`, `tools`, `messages`, breakpoints, parâmetros,
+`lastUserIndex` e `prompt`, o texto digitado da última mensagem do usuário,
+redigido e depois cortado em 1.000 bytes, vazio em `metadata_only`; usados
+pelos turnos e pelo título da sessão),
 `response_message` (mensagem reconstruída), `first_message_hash`
 (conversa, usado pelo Context Diff), `lifecycle` (eventos de transporte com
 horário: `request_started`, `upstream_connected`,
@@ -92,7 +95,8 @@ são gravados.
 
 Chave `(run_id, tool_use_id)`: `name`, `session_id`, `use_exchange_id`,
 `use_seq`, `use_count`, `input`, `result_exchange_id`, `result_seq`,
-`result_is_error`, `result_preview`, `result_bytes`. O status é calculado
+`result_is_error`, `result_preview` (início do texto, redigido e depois
+cortado em 300 bytes; vazio em `metadata_only`), `result_bytes`. O status é calculado
 na consulta: `matched`, `pending` (execução ativa), `unresolved` (execução
 terminada sem resultado), `ambiguous` (o mesmo ID pedido mais de uma vez).
 

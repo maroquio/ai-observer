@@ -646,9 +646,10 @@ func (s *DuckDBStore) HTTPCaptureRuns(ctx context.Context, f HTTPRunFilter, page
 }
 
 // HTTPSessionRuns returns the runs that carried exchanges of a session
+// ("": exchanges without a session)
 func (s *DuckDBStore) HTTPSessionRuns(ctx context.Context, sessionID string) ([]api.HTTPCaptureRun, error) {
 	rows, err := s.db.QueryContext(ctx, "SELECT "+runColumns+` FROM http_capture_runs r
-		WHERE r.run_id IN (SELECT DISTINCT run_id FROM http_capture_exchanges WHERE session_id = ?)
+		WHERE r.run_id IN (SELECT DISTINCT run_id FROM http_capture_exchanges WHERE COALESCE(session_id, '') = ?)
 		ORDER BY r.started_at`, sessionID)
 	if err != nil {
 		return nil, err
@@ -728,6 +729,19 @@ func (s *DuckDBStore) HTTPTrafficSummary(ctx context.Context, runID, sessionID s
 	if sessionID != "" {
 		c.add("e.session_id = ?", sessionID)
 	}
+	return s.trafficSummary(ctx, c)
+}
+
+// HTTPSessionTrafficSummary aggregates a session's exchanges; "" means
+// the exchanges without a session (in HTTPTrafficSummary it means all)
+func (s *DuckDBStore) HTTPSessionTrafficSummary(ctx context.Context, sessionID string) (*api.HTTPTrafficSummary, error) {
+	var c conditions
+	c.add("COALESCE(e.session_id, '') = ?", sessionID)
+	return s.trafficSummary(ctx, c)
+}
+
+// trafficSummary aggregates the exchanges matching c
+func (s *DuckDBStore) trafficSummary(ctx context.Context, c conditions) (*api.HTTPTrafficSummary, error) {
 	where, args := c.where()
 	out := &api.HTTPTrafficSummary{Models: []string{}, CostStatus: api.CostUnavailable}
 	var first, last sql.NullTime

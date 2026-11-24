@@ -37,6 +37,8 @@ import type {
   HTTPRunDetail,
   HTTPSSEEventsResponse,
   HTTPSessionTrafficResponse,
+  HTTPInspectorSessionsResponse,
+  HTTPSessionTurnsResponse,
   HTTPToolLinksResponse,
   HTTPUsageDetail,
   UpdateHTTPCaptureRunRequest,
@@ -516,6 +518,18 @@ export const api = {
       cursor: params.cursor,
     })
     return fetchJSON(`${HTTP_INSPECTOR}/runs${query}`, options)
+  },
+
+  // A page of the sessions with captured traffic, the most recently active
+  // first (sessionId "" groups the exchanges without a session)
+  async getHTTPInspectorSessions(params: { limit?: number; cursor?: string } = {}, options?: FetchOptions): Promise<HTTPInspectorSessionsResponse> {
+    return fetchJSON(`${HTTP_INSPECTOR}/sessions${buildQueryString({ limit: params.limit, cursor: params.cursor })}`, options)
+  },
+
+  // A session's captured traffic grouped into turns ("" for the exchanges
+  // without a session); 404 when nothing was captured for it
+  async getHTTPSessionTurns(sessionId: string, options?: FetchOptions): Promise<HTTPSessionTurnsResponse> {
+    return fetchJSON(`${HTTP_INSPECTOR}/sessions/${encodeURIComponent(sessionId || 'none')}/turns`, options)
   },
 
   async getHTTPCaptureRun(runId: string, options?: FetchOptions): Promise<HTTPRunDetail> {

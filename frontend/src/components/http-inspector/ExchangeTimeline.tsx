@@ -34,6 +34,9 @@ interface ExchangeTimelineProps {
   runModes?: Map<string, HTTPCaptureRunMode>
   // Labels exchanges without a session (a run's timeline)
   showCorrelation?: boolean
+  // false renders every row: for short lists, several on one page (the
+  // window virtualizer measures its offset only when it renders)
+  virtualize?: boolean
 }
 
 /**
@@ -41,7 +44,17 @@ interface ExchangeTimelineProps {
  * also count_tokens requests, errors and other endpoints. A row opens the
  * exchange's inspector (its own URL).
  */
-export function ExchangeTimeline({ exchanges, linkFor, linkState, runModes, showCorrelation = false }: ExchangeTimelineProps) {
+export function ExchangeTimeline({ exchanges, linkFor, linkState, runModes, showCorrelation = false, virtualize = true }: ExchangeTimelineProps) {
+  const renderRow = (index: number) => (
+    <TimelineRow
+      exchange={exchanges[index]}
+      rowIndex={index + 2}
+      to={linkFor(exchanges[index])}
+      linkState={linkState}
+      runMode={runModes?.get(exchanges[index].runId)}
+      showCorrelation={showCorrelation}
+    />
+  )
   return (
     <div className="overflow-x-auto">
       <div role="table" aria-label="Linha do tempo das trocas" aria-rowcount={exchanges.length + 1} className="min-w-[68rem]">
@@ -58,22 +71,23 @@ export function ExchangeTimeline({ exchanges, linkFor, linkState, runModes, show
             <div role="columnheader">Cache</div>
           </div>
         </div>
-        <VirtualRows
-          role="rowgroup"
-          count={exchanges.length}
-          rowHeight={ROW_HEIGHT}
-          rowKey={(index) => exchanges[index].id}
-          renderRow={(index) => (
-            <TimelineRow
-              exchange={exchanges[index]}
-              rowIndex={index + 2}
-              to={linkFor(exchanges[index])}
-              linkState={linkState}
-              runMode={runModes?.get(exchanges[index].runId)}
-              showCorrelation={showCorrelation}
-            />
-          )}
-        />
+        {virtualize ? (
+          <VirtualRows
+            role="rowgroup"
+            count={exchanges.length}
+            rowHeight={ROW_HEIGHT}
+            rowKey={(index) => exchanges[index].id}
+            renderRow={renderRow}
+          />
+        ) : (
+          <div role="rowgroup">
+            {exchanges.map((exchange, index) => (
+              <div key={exchange.id} role="none" style={{ height: `${ROW_HEIGHT}px` }}>
+                {renderRow(index)}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

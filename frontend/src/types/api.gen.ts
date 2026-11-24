@@ -1557,6 +1557,19 @@ export interface WireRequestSummary {
   tools: WireToolsSummary
   messages: WireMessagesSummary
   toolResults: WireToolResultRef[] | null
+  /**
+   * lastUserIndex is the index of the last message with role user (nil
+   * without one). Claude Code puts a role system message after the first
+   * prompt, so the last user message is not always the last message.
+   */
+  lastUserIndex?: number
+  /**
+   * prompt is the text of the last user message when it carries no
+   * tool_result (a typed prompt), without the text blocks the client
+   * injects (<system-reminder>…), at most 16 KiB; empty otherwise.
+   * Callers redact it and then cut it with TruncatePrompt before storing.
+   */
+  prompt?: string
   /** toolUses are the tool_use blocks in the request's history */
   toolUses: WireToolUseRef[] | null
   cacheBreakpoints: WireCacheBreakpoint[] | null
@@ -1632,8 +1645,9 @@ export interface WireToolResultRef {
   /** contentBytes is the size of the block's content JSON */
   contentBytes: number
   /**
-   * preview is the start of the result's text (at most 300 bytes, cut at
-   * a UTF-8 boundary); callers sanitize it before storing
+   * preview is the start of the result's text (at most 8 KiB, cut at a
+   * UTF-8 boundary); callers redact it and then cut it with
+   * TruncatePreview (300 bytes) before storing
    */
   preview?: string
 }
@@ -1949,6 +1963,107 @@ export interface HTTPSourceComparison {
   /** Certainty: exact (every inference exchange matched), partial, none */
   certainty: string
   note: string
+}
+
+/**
+ * HTTPInspectorSessionsResponse is a page of the sessions with captured
+ * traffic, the most recently active first
+ */
+export interface HTTPInspectorSessionsResponse {
+  sessions: HTTPInspectorSession[]
+  total: number
+  hasMore: boolean
+  nextCursor?: string
+}
+
+/**
+ * HTTPInspectorSession is a session with captured traffic, as the HTTP
+ * Inspector lists it (SessionID "" groups the exchanges without a session)
+ */
+export interface HTTPInspectorSession {
+  sessionId: string
+  /**
+   * title is the typed prompt of the session's first turn (redacted);
+   * empty when no turn was found or the capture holds no content
+   */
+  title?: string
+  firstAt: string
+  lastAt: string
+  exchanges: number
+  inference: number
+  /** turns deduced from the requests (see HTTPSessionTurnsResponse) */
+  turns: number
+  errors: number
+  inProgress: number
+  /**
+   * totalInputTokens and OutputTokens of the model inferences (final and
+   * partial usage), CostUSD their estimated API-equivalent cost
+   */
+  totalInputTokens: number
+  outputTokens: number
+  costUsd: number
+  costStatus: HTTPCostStatus
+  models: string[]
+  /** runs is the number of capture runs that carried the session */
+  runs: number
+}
+
+/**
+ * HTTPSessionTurnsResponse is a session's captured traffic grouped into
+ * turns, deduced from the requests (the API has no turn ID; Note says how)
+ */
+export interface HTTPSessionTurnsResponse {
+  /** sessionId is "" for the exchanges without a session */
+  sessionId: string
+  summary: HTTPTrafficSummary
+  /** runs that carried the session's exchanges */
+  runs: HTTPCaptureRun[]
+  comparison?: HTTPSourceComparison
+  /**
+   * preamble holds the exchanges before the first turn (startup checks,
+   * the quota probe); nil when there are none
+   */
+  preamble?: HTTPTurn
+  turns: HTTPTurn[]
+  /**
+   * truncated is true when the session has more exchanges than are
+   * grouped (the newest are left out; Summary counts all of them)
+   */
+  truncated: boolean
+  note: string
+}
+
+/**
+ * HTTPTurn is a turn of a session's captured traffic: a typed prompt and
+ * the exchanges until the next one (the tool loop's requests, subagents,
+ * count_tokens and other auxiliary calls, by start time). Numbers follow
+ * HTTPTrafficSummary: errors leave out quota probes, tokens and cost come
+ * from model inferences, final usage apart from partial.
+ */
+export interface HTTPTurn {
+  /** index is 1-based; 0 is the preamble (exchanges before the first turn) */
+  index: number
+  /**
+   * prompt is the start of the typed text (redacted); empty for the
+   * preamble and when the capture holds no content (metadata_only, or
+   * captured by an earlier version)
+   */
+  prompt?: string
+  startedAt: string
+  endedAt: string
+  durationMs: number
+  exchanges: HTTPExchange[]
+  /** inference counts the model inferences, Auxiliary the other exchanges */
+  inference: number
+  auxiliary: number
+  errors: number
+  /** toolUses are the tools the model requested, in order */
+  toolUses: string[]
+  tokens: HTTPTokenTotals
+  partialTokens: HTTPTokenTotals
+  costUsd: number
+  costStatus: HTTPCostStatus
+  models: string[]
 }
 
 /**

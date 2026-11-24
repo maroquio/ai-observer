@@ -113,6 +113,8 @@ func REST() apigen.Config {
 			response(api.HTTPUsageDetail{}),
 			response(api.HTTPRequestDiffResponse{}),
 			response(api.HTTPSessionTrafficResponse{}),
+			response(api.HTTPInspectorSessionsResponse{}),
+			response(api.HTTPSessionTurnsResponse{}),
 			// Self-metrics, health, generic answers
 			response(api.InternalMetricsResponse{}),
 			response(api.HealthResponse{}),
@@ -212,6 +214,8 @@ func REST() apigen.Config {
 			enum(api.HTTPToolLink{}, "Status", "HTTPToolLinkStatus"),
 			enum(api.HTTPSSEEvent{}, "ParseStatus", "WireParseStatus"),
 			enum(api.HTTPTrafficSummary{}, "CostStatus", "HTTPCostStatus"),
+			enum(api.HTTPInspectorSession{}, "CostStatus", "HTTPCostStatus"),
+			enum(api.HTTPTurn{}, "CostStatus", "HTTPCostStatus"),
 			enum(anthropicwire.Observation{}, "Certainty", "WireCertainty"),
 
 			// Lists the handlers always write as [] or {} (checked on an
@@ -258,6 +262,13 @@ func REST() apigen.Config {
 			nonNull(api.HTTPToolLinksResponse{}, "Tools"),
 			nonNull(api.HTTPTrafficSummary{}, "Models"),
 			nonNull(api.HTTPSessionTrafficResponse{}, "Runs"),
+			nonNull(api.HTTPInspectorSessionsResponse{}, "Sessions"),
+			nonNull(api.HTTPInspectorSession{}, "Models"),
+			nonNull(api.HTTPSessionTurnsResponse{}, "Runs"),
+			nonNull(api.HTTPSessionTurnsResponse{}, "Turns"),
+			nonNull(api.HTTPTurn{}, "Exchanges"),
+			nonNull(api.HTTPTurn{}, "ToolUses"),
+			nonNull(api.HTTPTurn{}, "Models"),
 			nonNull(websocket.Notification{}, "Services"),
 			nonNull(websocket.Notification{}, "Timestamps"),
 

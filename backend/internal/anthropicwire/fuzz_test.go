@@ -77,7 +77,7 @@ func FuzzParseRequest(f *testing.F) {
 			t.Fatalf("inconsistent summary %+v", s)
 		}
 		for _, r := range s.ToolResults {
-			if len(r.Preview) > MaxPreviewBytes {
+			if len(r.Preview) > maxPreviewSourceBytes || len(TruncatePreview(r.Preview)) > MaxPreviewBytes {
 				t.Fatalf("preview of %d bytes", len(r.Preview))
 			}
 		}

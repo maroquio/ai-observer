@@ -166,6 +166,16 @@ func Routes() apigen.Spec {
 			Responses: []apigen.Response{{Status: http.StatusCreated, Description: "Created", Body: api.HTTPCaptureRunCreated{}}, errBadRequest,
 				{Status: http.StatusConflict, Description: "The HTTP capture proxy is not enabled", Body: api.ErrorResponse{}}, errDefault}},
 		runRoute(get("/api/http-inspector/runs/{runId}", "http-inspector", "A capture run with its summary", nil, ok(api.HTTPRunDetail{}), errNotFound, errDefault)),
+		get("/api/http-inspector/sessions", "http-inspector", "A page of the sessions with captured traffic, the most recently active first",
+			[]apigen.Param{limit(25, 100), paramCursor, paramOffset},
+			query(api.HTTPInspectorSessionsResponse{})...),
+		func() apigen.Route {
+			r := get("/api/http-inspector/sessions/{sessionId}/turns", "http-inspector", "A session's captured traffic grouped into turns",
+				nil, ok(api.HTTPSessionTurnsResponse{}), errNotFound, errDefault)
+			r.PathParams = map[string]string{"sessionId": "Session ID, or \"none\" for the exchanges without a session"}
+			r.Description = "Turns are deduced from the requests (the API has no turn ID): a turn starts at a main-conversation request whose last user message carries no tool_result. At most 5,000 exchanges are grouped (truncated)."
+			return r
+		}(),
 		runRoute(apigen.Route{Method: http.MethodPut, Path: "/api/http-inspector/runs/{runId}", Tag: "http-inspector", Summary: "Rename a capture run or set its note (omitted fields stay)",
 			Body: api.UpdateHTTPCaptureRunRequest{}, BodyRequired: true,
 			Responses: []apigen.Response{ok(api.HTTPCaptureRun{}), errBadRequest, errNotFound, errDefault}}),

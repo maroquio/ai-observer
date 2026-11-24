@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tobilg/ai-observer/internal/anthropicwire"
 	"github.com/tobilg/ai-observer/internal/api"
 	"github.com/tobilg/ai-observer/internal/httpcapture"
 	"github.com/tobilg/ai-observer/internal/redact"
@@ -1007,6 +1008,175 @@ func TestQuotaProbeIsAuxiliary(t *testing.T) {
 	cands, err := h.store.HTTPDiffCandidates(context.Background(), h.runID, "model_inference", sid, ex[3].Seq, 10)
 	if err != nil || len(cands) != 1 || cands[0].ExchangeID != ex[2].ID {
 		t.Fatalf("diff candidates %+v %v", cands, err)
+	}
+}
+
+// The inspector's session list: sessions by last activity (cursor pages),
+// one row for the exchanges without a session, turns and titles from the
+// typed prompts, redacted; metadata_only stores no prompt
+func TestInspectorSessions(t *testing.T) {
+	secret := fake("sk-ant-api03-", 48)
+	for _, mode := range []string{httpcapture.ModeSafe, httpcapture.ModeMetadataOnly} {
+		t.Run(mode, func(t *testing.T) {
+			h := newHarness(t, mode)
+			ctx := context.Background()
+			sids := []string{"s-1", "s-2", "s-3"}
+			for _, sid := range sids {
+				body := strings.Replace(requestBody(sid, true), "leia /tmp/a.txt", "leia "+secret, 1)
+				resp := post(t, h.proxyURL, "/v1/messages?beta=true", body, http.Header{"X-Claude-Code-Session-Id": {sid}})
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
+			resp, err := http.Get(h.proxyURL + "/v1/models")
+			if err != nil {
+				t.Fatal(err)
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			h.flush()
+
+			first, err := h.store.HTTPInspectorSessions(ctx, storage.Page{Limit: 3})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if first.Total != 4 || len(first.Sessions) != 3 || !first.HasMore || first.Sessions[0].SessionID != "" ||
+				first.Sessions[0].Exchanges != 1 || first.Sessions[0].Turns != 0 || first.Sessions[1].SessionID != "s-3" {
+				t.Fatalf("first page %+v", first)
+			}
+			s3 := first.Sessions[1]
+			if s3.Turns != 1 || s3.Inference != 1 || s3.OutputTokens != 42 || s3.Runs != 1 || len(s3.Models) != 1 {
+				t.Fatalf("session %+v", s3)
+			}
+			if mode == httpcapture.ModeSafe && (strings.Contains(s3.Title, secret) || !strings.HasPrefix(s3.Title, "leia [REDACTED")) {
+				t.Fatalf("title %q", s3.Title)
+			}
+			if mode == httpcapture.ModeMetadataOnly && s3.Title != "" {
+				t.Fatalf("metadata_only title %q", s3.Title)
+			}
+			next, err := h.store.HTTPInspectorSessions(ctx, storage.Page{Limit: 3, Cursor: first.NextCursor})
+			if err != nil || len(next.Sessions) != 1 || next.Sessions[0].SessionID != "s-1" || next.HasMore {
+				t.Fatalf("next page %+v %v", next, err)
+			}
+
+			none, err := h.store.HTTPSessionTrafficSummary(ctx, "")
+			if err != nil || none.Exchanges != 1 || none.Other != 1 {
+				t.Fatalf("sessionless summary %+v %v", none, err)
+			}
+			runs, err := h.store.HTTPSessionRuns(ctx, "")
+			if err != nil || len(runs) != 1 {
+				t.Fatalf("sessionless runs %+v %v", runs, err)
+			}
+			rows, truncated, err := h.store.HTTPSessionTurnExchanges(ctx, "s-2", 10)
+			if err != nil || truncated || len(rows) != 1 || !rows[0].Request.Known || rows[0].Request.Tools != 1 ||
+				rows[0].Request.MessageCount != 1 || rows[0].Request.LastUserIndex != 0 || rows[0].Request.FirstMessageHash == "" ||
+				rows[0].Request.LastMessageHash != rows[0].Request.FirstMessageHash || rows[0].Request.SystemSHA == "" {
+				t.Fatalf("turn rows %+v %v %v", rows, truncated, err)
+			}
+		})
+	}
+}
+
+// A secret that crosses the stored prompt's size limit is redacted whole:
+// redaction runs before the prompt is cut, since its rules need the whole
+// shape (a PEM key's END line, a JWT's three segments)
+func TestPromptRedactedBeforeTruncation(t *testing.T) {
+	filler := strings.Repeat("a", anthropicwire.MaxPromptBytes-15) + " "
+	h := newHarness(t, httpcapture.ModeSafe)
+	ctx := context.Background()
+	for sid, secret := range crossingSecrets() {
+		text, _ := json.Marshal("leia " + filler + secret)
+		body := strings.Replace(requestBody(sid, true), "leia /tmp/a.txt", string(text[1:len(text)-1]), 1)
+		resp := post(t, h.proxyURL, "/v1/messages?beta=true", body, http.Header{"X-Claude-Code-Session-Id": {sid}})
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+	h.flush()
+
+	sessions, err := h.store.HTTPInspectorSessions(ctx, storage.Page{Limit: 10})
+	if err != nil || len(sessions.Sessions) != 2 {
+		t.Fatalf("sessions %+v %v", sessions, err)
+	}
+	for _, s := range sessions.Sessions {
+		if len(s.Title) > anthropicwire.MaxPromptBytes || !strings.Contains(s.Title, "[REDACTED") ||
+			strings.Contains(s.Title, "eyJ") || strings.Contains(s.Title, "MIIEvQ") {
+			t.Fatalf("%s: title %q", s.SessionID, s.Title)
+		}
+	}
+	for _, ex := range h.exchanges() {
+		stored, err := h.store.HTTPExchange(ctx, ex.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		all, _ := json.Marshal(stored)
+		if bytes.Contains(all, []byte("eyJ")) || bytes.Contains(all, []byte("MIIEvQ")) {
+			t.Fatalf("%s: secret stored: %s", ex.ID, all)
+		}
+	}
+}
+
+// crossingSecrets are credentials the redactor recognizes only whole (a PEM
+// key needs its END line, a JWT its three segments), built at runtime; the
+// tests place them across a size limit. Their parts "MIIEvQ" and "eyJ" must
+// not be stored.
+func crossingSecrets() map[string]string {
+	keyBody := strings.Repeat("MIIEvQIBADANBgkqhkiG9w0BAQEFAASC", 40)
+	return map[string]string{
+		"s-pem": "-----" + "BEGIN PRIVATE KEY-----\n" + keyBody + "\n-----" + "END PRIVATE KEY-----",
+		"s-jwt": "eyJ" + strings.Repeat("hbGciOiJIUzI1", 3) + ".eyJ" + strings.Repeat("zdWIiOiIxMjM0", 3) + "." + strings.Repeat("SflKxwRJSMeK", 3),
+	}
+}
+
+// The same for a tool result's preview, stored in the request summary and
+// in the tool link
+func TestToolResultPreviewRedactedBeforeTruncation(t *testing.T) {
+	filler := strings.Repeat("a", anthropicwire.MaxPreviewBytes-10) + " "
+	h := newHarness(t, httpcapture.ModeSafe)
+	ctx := context.Background()
+	n := 0
+	for sid, secret := range crossingSecrets() {
+		n++
+		id := fmt.Sprintf("toolu_%02d", n)
+		content, _ := json.Marshal(filler + secret)
+		hdr := http.Header{"X-Claude-Code-Session-Id": {sid}}
+		resp := post(t, h.proxyURL, "/v1/messages?beta=true", requestBody(sid, true), hdr)
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		follow := requestBody(sid, true,
+			`{"role":"assistant","content":[{"type":"tool_use","id":"`+id+`","name":"Read","input":{"file_path":"/tmp/a.txt"}}]}`,
+			`{"role":"user","content":[{"type":"tool_result","tool_use_id":"`+id+`","content":`+string(content)+`}]}`)
+		resp = post(t, h.proxyURL, "/v1/messages?beta=true", follow, hdr)
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+	h.flush()
+
+	links, err := h.store.HTTPToolLinks(ctx, h.runID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	previews := 0
+	for _, l := range links {
+		if l.ResultPreview == "" {
+			continue
+		}
+		previews++
+		if len(l.ResultPreview) > anthropicwire.MaxPreviewBytes || !strings.Contains(l.ResultPreview, "[REDACTED") ||
+			strings.Contains(l.ResultPreview, "eyJ") || strings.Contains(l.ResultPreview, "MIIEvQ") {
+			t.Fatalf("%s: preview %q", l.ToolUseID, l.ResultPreview)
+		}
+	}
+	if previews != 2 {
+		t.Fatalf("%d previews in %+v", previews, links)
+	}
+	for _, ex := range h.exchanges() {
+		stored, err := h.store.HTTPExchange(ctx, ex.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		all, _ := json.Marshal(stored)
+		if bytes.Contains(all, []byte("eyJ")) || bytes.Contains(all, []byte("MIIEvQ")) {
+			t.Fatalf("%s: secret stored: %s", ex.ID, all)
+		}
 	}
 }
 

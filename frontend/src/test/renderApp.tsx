@@ -41,6 +41,7 @@ export async function preloadHttpInspectorPages() {
   await Promise.all([
     import('@/pages/HttpInspectorPage'),
     import('@/pages/HttpRunPage'),
+    import('@/pages/HttpSessionPage'),
     import('@/pages/HttpExchangePage'),
     import('@/pages/SessionTranscriptPage'),
   ])

@@ -238,6 +238,36 @@ export function sessionTrafficPath(sessionId: string): string {
   return `/sessions/${encodeURIComponent(sessionId)}?view=traffic`
 }
 
+// The URL parameter of the exchanges without a session
+export const NO_SESSION_PARAM = 'none'
+
+/** The HTTP Inspector's page of a session ('' for the exchanges without one) */
+export function inspectorSessionPath(sessionId: string): string {
+  return `${HTTP_INSPECTOR_PATH}/sessions/${encodeURIComponent(sessionId || NO_SESSION_PARAM)}`
+}
+
+/** The session ID of an inspector session page's URL parameter */
+export function sessionIdFromParam(param: string): string {
+  return param === NO_SESSION_PARAM ? '' : param
+}
+
+/** A short form of a session ID for titles (its first 8 characters) */
+export function shortSessionId(sessionId: string): string {
+  return sessionId.length > 12 ? `${sessionId.slice(0, 8)}…` : sessionId
+}
+
+/** Exchanges that are not model inferences: count_tokens, quota probes, other endpoints, transport errors */
+export function isAuxiliaryExchange(exchange: Pick<HTTPExchange, 'kind'>): boolean {
+  return exchange.kind !== 'model_inference'
+}
+
+/** The requested tools with how often each was requested, in order of first use */
+export function toolUseCounts(names: string[]): Array<{ name: string; count: number }> {
+  const counts = new Map<string, number>()
+  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1)
+  return [...counts].map(([name, count]) => ({ name, count }))
+}
+
 /** The inspector of an exchange, in the session's or the run's context */
 export function exchangePath(context: ExchangeContext, exchangeId: string): string {
   const id = encodeURIComponent(exchangeId)

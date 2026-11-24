@@ -111,9 +111,21 @@ execuções paralelas.
   inspector com as abas Resumo, Request, Response, SSE Stream,
   Tokens & Cache e Context Diff. Link direto:
   `/sessions/<sessão>/http-exchanges/<exchange>`.
-- **HTTP Inspector** (menu): status do proxy, execuções de captura, ferramentas
-  (`tool_use → tool_result`), renomear, exportar (zip saneado) e apagar.
-  Link direto: `/http-inspector/runs/<execução>`.
+- **HTTP Inspector** (menu), aba **Sessões** (a inicial): cada sessão
+  capturada, com turnos, trocas, tokens e custo estimado. A página da sessão
+  (`/http-inspector/sessions/<sessão>`) mostra os **turnos**: cada prompt
+  digitado com as requisições e respostas que vieram dele (o loop de
+  ferramentas, subagentes, `count_tokens`), com tokens de entrada, saída e
+  cache, custo e ferramentas pedidas por turno. As chamadas auxiliares
+  (`count_tokens`, sonda de cota, outros endpoints) ficam ocultas até ligar
+  "Mostrar chamadas auxiliares". As trocas sem ID de sessão (checagens de
+  conectividade) ficam na linha "Sem sessão" (`/http-inspector/sessions/none`).
+  O fio não tem ID de turno: o AI Observer deduz os turnos (veja
+  ARCHITECTURE.md), e capturas feitas antes desta versão não têm o texto do
+  prompt.
+- **HTTP Inspector**, aba **Execuções de captura**: status do proxy,
+  execuções, ferramentas (`tool_use → tool_result`), renomear, exportar (zip
+  saneado) e apagar. Link direto: `/http-inspector/runs/<execução>`.
 - A lista de sessões mostra quantas trocas foram capturadas em cada sessão.
 
 A sessão vem do cabeçalho `X-Claude-Code-Session-Id` (ou, na falta dele, de

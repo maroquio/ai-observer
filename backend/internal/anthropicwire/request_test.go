@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestParseRequestFixture(t *testing.T) {
@@ -164,6 +165,8 @@ func TestParseRequestShapes(t *testing.T) {
 	}
 }
 
+// The preview as stored: parsed, then cut by TruncatePreview (after
+// redaction, in httpcapture)
 func TestToolResultPreview(t *testing.T) {
 	long := strings.Repeat("é", 400) // 800 bytes
 	escaped := strings.Repeat(`ç`, 1000)
@@ -182,11 +185,25 @@ func TestToolResultPreview(t *testing.T) {
 		if len(s.ToolResults) != 1 {
 			t.Fatalf("%s: %+v", tt.name, s)
 		}
-		if got := s.ToolResults[0].Preview; got != tt.want {
+		if got := TruncatePreview(s.ToolResults[0].Preview); got != tt.want {
 			t.Errorf("%s: preview %q (%d bytes), want %d bytes", tt.name, got, len(got), len(tt.want))
 		}
 		if s.ToolResults[0].ContentBytes != len(tt.content) {
 			t.Errorf("%s: content bytes %d, want %d", tt.name, s.ToolResults[0].ContentBytes, len(tt.content))
+		}
+	}
+
+	// The parser keeps more than is stored, so redaction sees a secret
+	// crossing MaxPreviewBytes whole; escaped text is decoded that far too
+	for name, content := range map[string]string{
+		"plain":   `"` + strings.Repeat("é", maxPreviewSourceBytes) + `"`,
+		"escaped": `"` + strings.Repeat(`\u00e7`, maxPreviewSourceBytes) + `"`,
+		"blocks":  `[{"type":"text","text":"` + strings.Repeat("x", 600) + `"},{"type":"text","text":"` + strings.Repeat("y", maxPreviewSourceBytes) + `"}]`,
+	} {
+		body := `{"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":` + content + `}]}]}`
+		got := ParseRequest([]byte(body)).ToolResults[0].Preview
+		if len(got) > maxPreviewSourceBytes || len(got) < maxPreviewSourceBytes-1 || !utf8.ValidString(got) {
+			t.Errorf("%s: parsed preview of %d bytes", name, len(got))
 		}
 	}
 }
@@ -304,7 +321,7 @@ func TestParseRequestLargeBody(t *testing.T) {
 	body := syntheticRequest(10 << 20)
 	s := ParseRequest(body)
 	if !s.Valid || s.Messages.Count < 200 || len(s.ToolResults) != s.Messages.Count/2 || s.Tools.Count != 40 ||
-		s.SessionID == "" || len(s.ToolResults[0].Preview) > MaxPreviewBytes {
+		s.SessionID == "" || len(s.ToolResults[0].Preview) > maxPreviewSourceBytes {
 		t.Fatalf("summary of %d bytes: valid=%v messages=%d results=%d", len(body), s.Valid, s.Messages.Count, len(s.ToolResults))
 	}
 }

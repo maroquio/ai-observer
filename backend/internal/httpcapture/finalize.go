@@ -22,7 +22,6 @@ import (
 // Text bounds of what is stored in the database (bodies are in files)
 const (
 	maxToolInputBytes  = 16 << 10
-	maxPreviewBytes    = 2 << 10
 	maxErrorBytes      = 4 << 10
 	maxSummaryJSONSize = 4 << 20
 )
@@ -391,7 +390,7 @@ func (e *Exchange) build(_ context.Context, snap snapshot) *storage.HTTPExchange
 			}
 			preview := ""
 			if c.cfg.Mode != ModeMetadataOnly {
-				preview = truncateText(c.san.String(r.Preview), maxPreviewBytes)
+				preview = anthropicwire.TruncatePreview(c.san.String(r.Preview))
 			}
 			toolResults = append(toolResults, storage.HTTPToolResultRecord{
 				ToolUseID: r.ToolUseID, IsError: r.IsError, Preview: preview, Bytes: int64(r.ContentBytes),
@@ -687,14 +686,24 @@ func (e *Exchange) storedJSON(v any, redact bool) json.RawMessage {
 	return b
 }
 
-// storedRequest is the request summary as stored: in metadata_only mode
-// without content (previews, tool arguments, metadata values)
+// storedRequest is the request summary as stored: the prompt and the tool
+// result previews redacted whole and then cut (cut first, a secret crossing
+// the limit would no longer be recognized); in metadata_only mode without
+// content (prompt, previews, tool arguments, metadata values)
 func (e *Exchange) storedRequest(s anthropicwire.RequestSummary) anthropicwire.RequestSummary {
 	if e.c.cfg.Mode != ModeMetadataOnly {
+		s.Prompt = anthropicwire.TruncatePrompt(e.c.san.String(s.Prompt))
+		results := make([]anthropicwire.ToolResultRef, len(s.ToolResults))
+		for i, r := range s.ToolResults {
+			r.Preview = anthropicwire.TruncatePreview(e.c.san.String(r.Preview))
+			results[i] = r
+		}
+		s.ToolResults = results
 		return s
 	}
 	s.Metadata = nil
 	s.StopSequences = nil
+	s.Prompt = ""
 	results := make([]anthropicwire.ToolResultRef, len(s.ToolResults))
 	for i, r := range s.ToolResults {
 		r.Preview = ""

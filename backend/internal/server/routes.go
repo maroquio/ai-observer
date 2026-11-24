@@ -126,6 +126,8 @@ func (s *Server) httpInspectorRoutes(r chi.Router) {
 	r.Get("/runs/{runId}/exchanges", hi.RunExchanges)
 	r.Get("/runs/{runId}/tools", hi.RunTools)
 	r.Get("/runs/{runId}/export", hi.ExportRun)
+	r.Get("/sessions", hi.ListSessions)
+	r.Get("/sessions/{sessionId}/turns", hi.SessionTurns)
 	r.Get("/exchanges/{exchangeId}", hi.GetExchange)
 	r.Get("/exchanges/{exchangeId}/request", hi.GetRequest)
 	r.Get("/exchanges/{exchangeId}/response", hi.GetResponse)
