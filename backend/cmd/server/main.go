@@ -60,6 +60,8 @@ func main() {
 		cmdWatch(os.Args[2:])
 	case "serve":
 		cmdServe(os.Args[2:])
+	case "run":
+		cmdRun(os.Args[2:])
 	case "healthcheck":
 		cmdHealthcheck(os.Args[2:])
 	case "-v", "--version", "version":
@@ -111,6 +113,7 @@ Commands:
   restore      Load an export back into the database
   compact      Rewrite the database into a new file without its free space
   setup        Show how to send a tool's telemetry to AI Observer
+  run          Run Claude Code with its Anthropic API traffic captured (HTTP Inspector)
   pricing      Update model prices from models.dev
   healthcheck  Exit 0 when the server on this machine is ready (container health check)
 

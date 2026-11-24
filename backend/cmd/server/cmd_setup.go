@@ -91,6 +91,28 @@ export OTEL_LOGS_EXPORT_INTERVAL=5000     # 5 seconds (default: 5000ms)
 
 # 5. Log prompts
 export OTEL_LOG_USER_PROMPTS=1
+
+Optional: HTTP Inspector (the Anthropic API traffic itself)
+-----------------------------------------------------------
+
+OTLP above reports what Claude Code says about its requests. The HTTP
+Inspector records the requests and responses themselves (system prompt,
+tools, messages, the streamed events, usage, cache) through a local proxy.
+It is a separate setting: ANTHROPIC_BASE_URL, not OTEL_EXPORTER_OTLP_ENDPOINT.
+
+# Start AI Observer with the capture proxy (off by default, 127.0.0.1 only)
+ai-observer serve --http-proxy
+
+# Run Claude Code through a capture run of its own (sets ANTHROPIC_BASE_URL
+# for this process only; your login is passed through unchanged)
+ai-observer run -- claude
+
+# Or point a shell at the shared proxy port (default 8787)
+#   export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+
+Credentials (Authorization, x-api-key, cookies) are never stored. Bodies are
+redacted by default (AI_OBSERVER_HTTP_CAPTURE_MODE=safe). See
+docs/http-inspector/QUICKSTART.md.
 `)
 	case "gemini":
 		fmt.Print(`Gemini CLI Setup

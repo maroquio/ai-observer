@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"sync"
@@ -54,6 +55,21 @@ func Init(level slog.Level, format string) {
 		return
 	}
 	InitializeText(level)
+}
+
+// InitTo is Init writing to w instead of standard output (used by
+// `ai-observer run --serve`, whose terminal belongs to the program it runs)
+func InitTo(w io.Writer, level slog.Level, format string) {
+	defaultLoggerMu.Lock()
+	defer defaultLoggerMu.Unlock()
+
+	opts := &slog.HandlerOptions{Level: level}
+	var handler slog.Handler = slog.NewTextHandler(w, opts)
+	if format == FormatJSON {
+		handler = slog.NewJSONHandler(w, opts)
+	}
+	defaultLogger = slog.New(handler)
+	slog.SetDefault(defaultLogger)
 }
 
 // Logger returns the default logger

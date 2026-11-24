@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -14,8 +15,17 @@ import (
 // AI_OBSERVER_LOG_FORMAT (text or json; an invalid format is reported and
 // replaced by text)
 func initLogging() {
+	initLoggingTo(nil)
+}
+
+// initLoggingTo is initLogging writing to w (nil: standard output)
+func initLoggingTo(w io.Writer) {
 	level, format, err := config.LogSettings()
-	logger.Init(parseLogLevel(level), format)
+	if w != nil {
+		logger.InitTo(w, parseLogLevel(level), format)
+	} else {
+		logger.Init(parseLogLevel(level), format)
+	}
 	if err != nil {
 		logger.Warn("Ignoring invalid setting, using the default", "error", err, "level", level, "format", format)
 	}
@@ -32,6 +42,10 @@ type serverFlags struct {
 	// OTLPGRPCPort is --otlp-grpc-port, which also takes 0 or off
 	OTLPGRPCPort optionalPortFlag
 	DB           string
+	// HTTPProxy is --http-proxy; HTTPProxyPort --http-proxy-port (which
+	// implies it), also 0 or off for launcher runs only
+	HTTPProxy     bool
+	HTTPProxyPort optionalPortFlag
 }
 
 // register defines the flags on fs; otlp adds --otlp-port
@@ -42,6 +56,8 @@ func (f *serverFlags) register(fs *flag.FlagSet, otlp bool) {
 		fs.Var(&f.OTLPPort, "otlp-port", "OTLP/HTTP ingestion port (default: AI_OBSERVER_OTLP_PORT or 4318)")
 		fs.Var(&f.OTLPGRPCPort, "otlp-grpc-port", "OTLP/gRPC ingestion port, 0 or off to turn it off (default: AI_OBSERVER_OTLP_GRPC_PORT or 4317)")
 	}
+	fs.BoolVar(&f.HTTPProxy, "http-proxy", false, "Run the HTTP capture proxy for Claude Code's Anthropic API traffic (default: AI_OBSERVER_HTTP_PROXY_ENABLED or false)")
+	fs.Var(&f.HTTPProxyPort, "http-proxy-port", "Shared HTTP capture proxy port, or off for ai-observer run only; implies --http-proxy (default: AI_OBSERVER_HTTP_PROXY_PORT or 8787)")
 	registerDBFlag(fs, &f.DB)
 }
 
@@ -61,6 +77,13 @@ func (f *serverFlags) apply(cfg *config.Config) {
 	}
 	if f.DB != "" {
 		cfg.DatabasePath = f.DB
+	}
+	if f.HTTPProxy {
+		cfg.HTTPProxy.Enabled = true
+	}
+	if f.HTTPProxyPort.set {
+		cfg.HTTPProxy.Enabled = true
+		cfg.HTTPProxy.Port = f.HTTPProxyPort.port
 	}
 }
 
