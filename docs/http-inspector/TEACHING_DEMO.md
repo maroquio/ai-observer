@@ -108,7 +108,10 @@ Aba **Tokens & Cache** dos dois exchanges (valores do upstream simulado):
 | input | 24 | 180 |
 | cache write (5m) | 3000 | 420 |
 | cache read | 0 | 3000 |
-| output | ~48 | ~37 |
+| output | ~20 | ~45 |
+
+(O `output` simulado varia com o texto gerado, que inclui o caminho do
+arquivo; input e cache são fixos.)
 
 Leitura: o #1 **escreve** o prefixo longo no cache (paga escrita); o #2
 **lê** esse prefixo do cache (muito mais barato) e só paga input pelo que é

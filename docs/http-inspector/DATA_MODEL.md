@@ -150,8 +150,9 @@ decodificada), `content_encoding`, `decode_status`, `truncated`,
 ## Backup e export
 
 - `GET /api/http-inspector/runs/{id}/export`: zip com `manifest.json`,
-  `run.json`, `tools.json` e `exchanges/NNNN-<id>.json` com os corpos
-  **saneados** apenas (nunca a variante raw).
+  `run.json`, `tools.json`, `exchanges/NNNN-<id>.json` (detalhe, uso,
+  eventos) e `exchanges/NNNN-<id>.request.body` / `.response.body` com os
+  corpos **saneados** apenas (nunca a variante raw).
 - `ai-observer backup` copia o banco inteiro (inclusive as tabelas de
   captura), **não** os arquivos de corpos: copie também o diretório de
   captura.

@@ -3,7 +3,9 @@
 Comece por `GET /api/http-inspector/status` (ou a página HTTP Inspector):
 mostra se o proxy está ligado, porta, upstream, modo de captura, execuções
 ativas, contadores (`exchanges`, `droppedRecords`, `storeErrors`,
-`parseErrors`, `lostBodyBytes`) e avisos.
+`parseErrors`, `lostBodyBytes`) e avisos. Os contadores valem desde o
+início do processo: depois de reiniciar o servidor eles voltam a 0, mesmo
+com execuções antigas gravadas.
 
 ## O servidor não inicia: porta ocupada
 
