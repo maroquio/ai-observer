@@ -52,6 +52,8 @@ type ServerInfo struct {
 	AllowedHosts []string
 	// SkipMigrationBackup is AI_OBSERVER_SKIP_MIGRATION_BACKUP
 	SkipMigrationBackup bool
+	// HTTPInspector describes the HTTP capture proxy
+	HTTPInspector api.HTTPInspectorStatus
 }
 
 // SetServerInfo sets what GET /api/status reports about the server: info is
@@ -144,8 +146,12 @@ func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
 			AllowedHosts:        info.AllowedHosts,
 			SkipMigrationBackup: info.SkipMigrationBackup,
 		},
-		Pricing: []api.StatusPricing{},
-		Imports: []api.StatusImport{},
+		Pricing:       []api.StatusPricing{},
+		Imports:       []api.StatusImport{},
+		HTTPInspector: info.HTTPInspector,
+	}
+	if resp.HTTPInspector.Warnings == nil {
+		resp.HTTPInspector.Warnings = []string{}
 	}
 	if info.AdminAPI {
 		resp.Settings.BackupDir = info.BackupDir

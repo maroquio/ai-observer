@@ -146,6 +146,56 @@ func Routes() apigen.Spec {
 			return r
 		}(),
 
+		func() apigen.Route {
+			r := get("/api/sessions/{sessionId}/http-exchanges", "http-inspector", "The API traffic the HTTP capture proxy recorded for a Claude Code session",
+				append(exchangeFilters(), limit(100, 500), paramCursor),
+				query(api.HTTPSessionTrafficResponse{})...)
+			r.PathParams = map[string]string{"sessionId": "Claude Code session ID"}
+			r.Description = "Exchanges of all runs that carried the session ID, in start order, with a summary and a comparison with the session's telemetry (never added up)."
+			return r
+		}(),
+
+		// HTTP Inspector
+		get("/api/http-inspector/status", "http-inspector", "The HTTP capture proxy: configuration and counters (never credentials)",
+			nil, ok(api.HTTPInspectorStatus{}), errDefault),
+		get("/api/http-inspector/runs", "http-inspector", "A page of capture runs, the newest first",
+			[]apigen.Param{{Name: "mode", Enum: "HTTPCaptureRunMode"}, {Name: "state", Enum: "HTTPCaptureRunState"}, limit(50, 1000), paramCursor, paramOffset},
+			query(api.HTTPCaptureRunsResponse{})...),
+		{Method: http.MethodPost, Path: "/api/http-inspector/runs", Tag: "http-inspector", Summary: "Start a launcher run with a proxy port of its own (ai-observer run)",
+			Body: api.CreateHTTPCaptureRunRequest{}, BodyRequired: true,
+			Responses: []apigen.Response{{Status: http.StatusCreated, Description: "Created", Body: api.HTTPCaptureRunCreated{}}, errBadRequest,
+				{Status: http.StatusConflict, Description: "The HTTP capture proxy is not enabled", Body: api.ErrorResponse{}}, errDefault}},
+		runRoute(get("/api/http-inspector/runs/{runId}", "http-inspector", "A capture run with its summary", nil, ok(api.HTTPRunDetail{}), errNotFound, errDefault)),
+		runRoute(apigen.Route{Method: http.MethodPut, Path: "/api/http-inspector/runs/{runId}", Tag: "http-inspector", Summary: "Rename a capture run or set its note (omitted fields stay)",
+			Body: api.UpdateHTTPCaptureRunRequest{}, BodyRequired: true,
+			Responses: []apigen.Response{ok(api.HTTPCaptureRun{}), errBadRequest, errNotFound, errDefault}}),
+		runRoute(apigen.Route{Method: http.MethodDelete, Path: "/api/http-inspector/runs/{runId}", Tag: "http-inspector", Summary: "Delete a finished capture run with its stored bodies",
+			Responses: []apigen.Response{noContent, errNotFound, {Status: http.StatusConflict, Description: "The run is active", Body: api.ErrorResponse{}}, errDefault}}),
+		runRoute(apigen.Route{Method: http.MethodPost, Path: "/api/http-inspector/runs/{runId}/finish", Tag: "http-inspector", Summary: "End a capture run (its proxy port closes)",
+			Body:      api.FinishHTTPCaptureRunRequest{},
+			Responses: []apigen.Response{ok(api.HTTPCaptureRun{}), errNotFound, {Status: http.StatusConflict, Description: "The HTTP capture proxy is not enabled", Body: api.ErrorResponse{}}, errDefault}}),
+		runRoute(get("/api/http-inspector/runs/{runId}/exchanges", "http-inspector", "A page of a run's exchanges in arrival order",
+			append(exchangeFilters(), limit(100, 500), paramCursor, paramOffset), append(query(api.HTTPExchangesResponse{}), errNotFound)...)),
+		runRoute(get("/api/http-inspector/runs/{runId}/tools", "http-inspector", "A run's tool uses and the requests that carried their results",
+			nil, ok(api.HTTPToolLinksResponse{}), errNotFound, errDefault)),
+		runRoute(get("/api/http-inspector/runs/{runId}/export", "http-inspector", "A zip of the run's records and redacted bodies (never raw bodies or credentials)",
+			nil, apigen.Response{Status: http.StatusOK, Media: "application/zip", Description: "Zip archive"}, errNotFound, errDefault)),
+		exchangeRoute(get("/api/http-inspector/exchanges/{exchangeId}", "http-inspector", "An exchange with its transport lifecycle and observations",
+			nil, ok(api.HTTPExchangeDetail{}), errNotFound, errDefault)),
+		exchangeRoute(get("/api/http-inspector/exchanges/{exchangeId}/request", "http-inspector", "An exchange's request: headers (credentials redacted), body and interpretation",
+			[]apigen.Param{{Name: "variant", Enum: "HTTPBodyVariant", Default: "safe", Description: "safe (redacted) or raw (as observed, full_raw mode only)"}},
+			ok(api.HTTPExchangeBody{}), errBadRequest, errNotFound, errDefault)),
+		exchangeRoute(get("/api/http-inspector/exchanges/{exchangeId}/response", "http-inspector", "An exchange's response: headers, body and interpretation",
+			[]apigen.Param{{Name: "variant", Enum: "HTTPBodyVariant", Default: "safe", Description: "safe (redacted) or raw (as observed, full_raw mode only)"}},
+			ok(api.HTTPExchangeBody{}), errBadRequest, errNotFound, errDefault)),
+		exchangeRoute(get("/api/http-inspector/exchanges/{exchangeId}/events", "http-inspector", "A page of a streamed response's Server-Sent Events in order",
+			[]apigen.Param{{Name: "type", Description: "Only events of this type (such as content_block_delta)"}, limit(500, 2000), paramCursor, paramOffset},
+			append(query(api.HTTPSSEEventsResponse{}), errNotFound)...)),
+		exchangeRoute(get("/api/http-inspector/exchanges/{exchangeId}/usage", "http-inspector", "An exchange's token usage, stream snapshots and estimated cost",
+			nil, ok(api.HTTPUsageDetail{}), errNotFound, errDefault)),
+		exchangeRoute(get("/api/http-inspector/exchanges/{exchangeId}/diff", "http-inspector", "The request compared with the previous one of the same run, kind and session (Context Diff)",
+			nil, ok(api.HTTPRequestDiffResponse{}), errNotFound, errDefault)),
+
 		// Services, stats, status
 		get("/api/services", "status", "The services that sent telemetry", nil, query(api.ServicesResponse{})...),
 		get("/api/providers", "status", "The supported tools", nil, ok(api.ProvidersResponse{}), errDefault),
@@ -244,4 +294,29 @@ func otlpRoute(path, summary string) apigen.Route {
 			errDefault,
 		},
 	}
+}
+
+// exchangeFilters are the filters of exchange lists
+func exchangeFilters() []apigen.Param {
+	return []apigen.Param{
+		{Name: "kind", Enum: "HTTPExchangeKind"},
+		{Name: "state", Enum: "HTTPExchangeState"},
+		{Name: "status", Description: "error (status >= 400 or none), ok, or an HTTP status code"},
+		{Name: "model", Description: "Requested or response model"},
+		{Name: "stream", Type: "boolean", Description: "Streamed responses only (true) or not streamed only (false)"},
+		{Name: "tool", Description: "A tool name the reply requested"},
+		{Name: "search", Description: "Text the path, headline, models, session or request ID contain (case-insensitive)"},
+		{Name: "minTokens", Type: "integer", Min: apigen.Int64(0), Description: "At least this many processed tokens"},
+		paramFromOpt, paramToOpt,
+	}
+}
+
+func runRoute(r apigen.Route) apigen.Route {
+	r.PathParams = map[string]string{"runId": "Capture run ID"}
+	return r
+}
+
+func exchangeRoute(r apigen.Route) apigen.Route {
+	r.PathParams = map[string]string{"exchangeId": "Exchange ID"}
+	return r
 }

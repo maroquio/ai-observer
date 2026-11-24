@@ -18,6 +18,8 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/tobilg/ai-observer/internal/config"
 	"github.com/tobilg/ai-observer/internal/handlers"
+	"github.com/tobilg/ai-observer/internal/httpcapture"
+	"github.com/tobilg/ai-observer/internal/httpproxy"
 	"github.com/tobilg/ai-observer/internal/logger"
 	"github.com/tobilg/ai-observer/internal/mcpserver"
 	appMiddleware "github.com/tobilg/ai-observer/internal/middleware"
@@ -64,6 +66,12 @@ type Server struct {
 	// transcripts is shared by the REST API and the MCP endpoint
 	transcripts *transcript.Cache
 
+	// httpProxy is the HTTP capture proxy (nil when disabled), httpInspector
+	// its API, captureBlobs the stored capture bodies (nil without them)
+	httpProxy     *httpproxy.Manager
+	httpInspector *handlers.HTTPInspector
+	captureBlobs  *httpcapture.BlobStore
+
 	// tls is the HTTP servers' TLS configuration (AI_OBSERVER_TLS_CERT,
 	// AI_OBSERVER_TLS_KEY); nil serves plain HTTP
 	tls *tls.Config
@@ -102,6 +110,13 @@ func New(cfg *config.Config) (*Server, error) {
 	s.stopping, s.stop = context.WithCancel(context.Background())
 
 	s.setupMiddleware()
+
+	if err := s.setupHTTPCapture(); err != nil {
+		s.stop()
+		hub.Stop()
+		store.Close()
+		return nil, err
+	}
 
 	h := handlers.New(store, hub)
 	s.ingest = h
@@ -173,6 +188,7 @@ func (s *Server) serverInfo() handlers.ServerInfo {
 		CORSOrigin:          s.config.FrontendURL,
 		AllowedHosts:        s.config.AllowedHosts,
 		SkipMigrationBackup: s.config.SkipMigrationBackup,
+		HTTPInspector:       s.httpInspectorStatus(),
 	}
 }
 
@@ -305,6 +321,14 @@ func (s *Server) ListenAndServe() error {
 		}
 		return fmt.Errorf("starting API server: %w", err)
 	}
+	if err := s.listenHTTPProxy(); err != nil {
+		otlpListener.Close()
+		if grpcListener != nil {
+			grpcListener.Close()
+		}
+		apiListener.Close()
+		return err
+	}
 
 	otlpServer := &http.Server{
 		Handler:      s.otlpHandler(),
@@ -395,6 +419,10 @@ func (s *Server) ListenAndServeAPIOnly() error {
 	apiListener, err := s.listen(s.config.APIPort)
 	if err != nil {
 		return fmt.Errorf("starting API server: %w", err)
+	}
+	if err := s.listenHTTPProxy(); err != nil {
+		apiListener.Close()
+		return err
 	}
 	return s.serveAPI(apiListener)
 }
@@ -507,6 +535,21 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}()
 	}
 
+	// Shutdown the HTTP capture proxy: open requests may finish until ctx
+	// ends, then what was captured is stored
+	if s.httpProxy != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			logger.Info("Shutting down HTTP capture proxy")
+			if err := s.httpProxy.Shutdown(ctx); err != nil {
+				errMu.Lock()
+				errs = append(errs, fmt.Errorf("shutting down HTTP capture proxy: %w", err))
+				errMu.Unlock()
+			}
+		}()
+	}
+
 	// Wait for servers to shutdown
 	wg.Wait()
 
@@ -524,6 +567,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Close WebSocket connections; the API server's Shutdown does not wait
 	// for hijacked connections
 	s.wsHub.Stop()
+
+	if s.captureBlobs != nil {
+		s.captureBlobs.Close()
+	}
 
 	// Close storage
 	if err := s.storage.Close(); err != nil {

@@ -330,6 +330,21 @@
         ],
         "type": "object"
       },
+      "CreateHTTPCaptureRunRequest": {
+        "description": "CreateHTTPCaptureRunRequest starts a launcher run (ai-observer run): the\nserver opens a proxy port for it alone",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CreateWidgetRequest": {
         "description": "CreateWidgetRequest is the body of POST /api/dashboards/{id}/widgets",
         "properties": {
@@ -523,6 +538,1340 @@
           "error"
         ],
         "type": "object"
+      },
+      "FinishHTTPCaptureRunRequest": {
+        "description": "FinishHTTPCaptureRunRequest ends a launcher run",
+        "properties": {
+          "exitCode": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pid": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "HTTPBodyPart": {
+        "description": "Body parts and their file names",
+        "enum": [
+          "request",
+          "response"
+        ],
+        "type": "string"
+      },
+      "HTTPBodyVariant": {
+        "description": "Body variants an exchange stores (HTTPExchangeBody.Variant)\n- safe: redacted copy\n- raw: as observed, local and sensitive (full_raw)\n- none: not stored (metadata_only, or nothing observed)",
+        "enum": [
+          "safe",
+          "raw",
+          "none"
+        ],
+        "type": "string"
+      },
+      "HTTPCaptureMode": {
+        "description": "What the capture stores: safe (redacted bodies), metadata_only (no bodies) or full_raw (also unredacted bodies, local files)\n- safe: CaptureSafe stores bodies with secrets redacted (default)\n- metadata_only: CaptureMetadataOnly stores no bodies, only metadata (status, timing, model, usage, sizes, hashes)\n- full_raw: CaptureFullRaw also stores the bodies as observed, unredacted, in local files (explicit opt-in for controlled classroom use)",
+        "enum": [
+          "safe",
+          "metadata_only",
+          "full_raw"
+        ],
+        "type": "string"
+      },
+      "HTTPCaptureRun": {
+        "description": "HTTPCaptureRun is a capture run: the exchanges of one launched process,\nor of the shared manual port during one server start",
+        "properties": {
+          "captureMode": {
+            "$ref": "#/components/schemas/HTTPCaptureMode"
+          },
+          "command": {
+            "type": "string"
+          },
+          "cwd": {
+            "description": "Cwd, Command and PID of a launched process",
+            "type": "string"
+          },
+          "endedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "exchanges": {
+            "description": "Exchanges observed, and the last one's time",
+            "format": "int64",
+            "type": "integer"
+          },
+          "exitCode": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lastExchangeAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/HTTPCaptureRunMode"
+          },
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "pid": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "port": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sessionIds": {
+            "description": "SessionIDs are the Claude Code session IDs the exchanges carried\n(X-Claude-Code-Session-Id or metadata.user_id)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HTTPCaptureRunState"
+          },
+          "storedBytes": {
+            "description": "StoredBytes of the run's bodies",
+            "format": "int64",
+            "type": "integer"
+          },
+          "unattributed": {
+            "description": "Unattributed counts exchanges without a session ID",
+            "format": "int64",
+            "type": "integer"
+          },
+          "upstream": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "mode",
+          "state",
+          "captureMode",
+          "port",
+          "upstream",
+          "startedAt",
+          "exchanges",
+          "sessionIds",
+          "unattributed",
+          "storedBytes"
+        ],
+        "type": "object"
+      },
+      "HTTPCaptureRunCreated": {
+        "description": "HTTPCaptureRunCreated is the started run and its proxy URL",
+        "properties": {
+          "proxyUrl": {
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/components/schemas/HTTPCaptureRun"
+          }
+        },
+        "required": [
+          "run",
+          "proxyUrl"
+        ],
+        "type": "object"
+      },
+      "HTTPCaptureRunMode": {
+        "description": "How a capture run records: manual (the shared proxy port) or launcher (ai-observer run, a port of its own)",
+        "enum": [
+          "manual",
+          "launcher"
+        ],
+        "type": "string"
+      },
+      "HTTPCaptureRunState": {
+        "description": "State of a capture run",
+        "enum": [
+          "active",
+          "finished",
+          "interrupted"
+        ],
+        "type": "string"
+      },
+      "HTTPCaptureRunsResponse": {
+        "description": "HTTPCaptureRunsResponse is a page of capture runs, newest first",
+        "properties": {
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPCaptureRun"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runs",
+          "total",
+          "hasMore"
+        ],
+        "type": "object"
+      },
+      "HTTPCostComponent": {
+        "description": "HTTPCostComponent is one priced part of an exchange's usage",
+        "properties": {
+          "component": {
+            "description": "Component: input, output, cache_read, cache_write_5m, cache_write_1h,\ncache_write_unknown",
+            "type": "string"
+          },
+          "costUsd": {
+            "format": "double",
+            "type": "number"
+          },
+          "note": {
+            "type": "string"
+          },
+          "pricePerMTok": {
+            "description": "PricePerMTok is the catalog price per million tokens; nil: no price",
+            "format": "double",
+            "type": "number"
+          },
+          "tokens": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "component",
+          "tokens"
+        ],
+        "type": "object"
+      },
+      "HTTPCostStatus": {
+        "description": "Cost estimate status",
+        "enum": [
+          "complete",
+          "partial",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "HTTPExchange": {
+        "description": "HTTPExchange is a row of the timeline: one request and its response",
+        "properties": {
+          "captureMode": {
+            "$ref": "#/components/schemas/HTTPCaptureMode"
+          },
+          "degraded": {
+            "description": "Degraded: part of this exchange was not captured (traffic was not\naffected)",
+            "type": "boolean"
+          },
+          "durationMs": {
+            "description": "Durations from the start in milliseconds (nil: not reached)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "errorType": {
+            "type": "string"
+          },
+          "firstEventMs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "headline": {
+            "description": "Headline is a one-sentence, evidence-based description",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/HTTPExchangeKind",
+            "description": "Kind: model_inference, token_count, other_api, transport_error"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "requestBytes": {
+            "description": "Body sizes as observed on the wire",
+            "format": "int64",
+            "type": "integer"
+          },
+          "requestId": {
+            "description": "RequestID is the upstream's request-id response header",
+            "type": "string"
+          },
+          "requestedModel": {
+            "type": "string"
+          },
+          "responseBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "responseModel": {
+            "type": "string"
+          },
+          "retryCount": {
+            "description": "RetryCount is the client's X-Stainless-Retry-Count header",
+            "format": "int64",
+            "type": "integer"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "seq": {
+            "description": "Seq is the exchange's position in its run (1-based, by arrival)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sessionEvidence": {
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "SessionID and the evidence it came from (header or body field)",
+            "type": "string"
+          },
+          "sseEvents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HTTPExchangeState"
+          },
+          "status": {
+            "description": "Status is the HTTP status the client received (0: none)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stopReason": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "toolResults": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "toolUses": {
+            "description": "ToolUses names the tools the reply requested; ToolResults counts\ntool results the request carried for the first time",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ttfbMs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/HTTPUsage"
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "seq",
+          "method",
+          "path",
+          "kind",
+          "state",
+          "status",
+          "stream",
+          "retryCount",
+          "startedAt",
+          "requestBytes",
+          "responseBytes",
+          "sseEvents",
+          "headline",
+          "toolUses",
+          "toolResults",
+          "degraded",
+          "captureMode"
+        ],
+        "type": "object"
+      },
+      "HTTPExchangeBody": {
+        "description": "HTTPExchangeBody is one side of an exchange: headers and body",
+        "properties": {
+          "available": {
+            "description": "Available lists the stored variants",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "body": {
+            "type": "string"
+          },
+          "bodyEncoding": {
+            "description": "BodyEncoding is utf8 or base64 (bytes that are no valid UTF-8)",
+            "type": "string"
+          },
+          "contentEncoding": {
+            "type": "string"
+          },
+          "contentType": {
+            "description": "ContentType and ContentEncoding headers; DecodeStatus says how the\nbody was decoded for display (identity, decoded, unsupported, error)",
+            "type": "string"
+          },
+          "decodeStatus": {
+            "$ref": "#/components/schemas/WireDecodeStatus"
+          },
+          "exchangeId": {
+            "type": "string"
+          },
+          "headers": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPHeader"
+            },
+            "type": "array"
+          },
+          "message": {
+            "$ref": "#/components/schemas/WireMessage",
+            "description": "Message is the interpreted reply (part response, Messages API)"
+          },
+          "observedBytes": {
+            "description": "ObservedBytes and ObservedSHA256 describe the bytes on the wire\n(encoded); the SHA-256 is empty when bytes were lost",
+            "format": "int64",
+            "type": "integer"
+          },
+          "observedSha256": {
+            "type": "string"
+          },
+          "part": {
+            "$ref": "#/components/schemas/HTTPBodyPart",
+            "description": "Part is request or response"
+          },
+          "redactions": {
+            "description": "Redactions counts the replaced values",
+            "format": "int64",
+            "type": "integer"
+          },
+          "request": {
+            "$ref": "#/components/schemas/WireRequestSummary",
+            "description": "Request is the interpreted request (part request, Messages API)"
+          },
+          "sanitized": {
+            "description": "Sanitized: redaction changed the stored safe variant",
+            "type": "boolean"
+          },
+          "storedBytes": {
+            "description": "StoredBytes and StoredSHA256 describe the returned variant (decoded)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "storedSha256": {
+            "type": "string"
+          },
+          "truncated": {
+            "description": "Truncated: the body exceeded the storage limit; only its start is\nstored (the traffic was forwarded whole)",
+            "type": "boolean"
+          },
+          "unavailable": {
+            "description": "Unavailable explains a missing body (metadata_only, not captured)",
+            "type": "string"
+          },
+          "variant": {
+            "$ref": "#/components/schemas/HTTPBodyVariant",
+            "description": "Variant of the body returned: safe (redacted), raw (as observed,\nfull_raw only) or none"
+          }
+        },
+        "required": [
+          "exchangeId",
+          "part",
+          "headers",
+          "variant",
+          "available",
+          "observedBytes",
+          "storedBytes",
+          "truncated",
+          "sanitized",
+          "redactions"
+        ],
+        "type": "object"
+      },
+      "HTTPExchangeDetail": {
+        "description": "HTTPExchangeDetail is an exchange with its transport lifecycle and\ninterpretation (GET /api/http-inspector/exchanges/{id})",
+        "properties": {
+          "degradedReasons": {
+            "description": "DegradedReasons explain what was not captured",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "exchange": {
+            "$ref": "#/components/schemas/HTTPExchange"
+          },
+          "lifecycle": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPLifecycleEvent"
+            },
+            "type": "array"
+          },
+          "nextId": {
+            "type": "string"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/WireObservation"
+            },
+            "type": "array"
+          },
+          "prevId": {
+            "description": "Previous and next exchange of the run, for navigation",
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/components/schemas/HTTPCaptureRun",
+            "description": "Run is the exchange's run"
+          }
+        },
+        "required": [
+          "exchange",
+          "lifecycle",
+          "observations",
+          "degradedReasons",
+          "run"
+        ],
+        "type": "object"
+      },
+      "HTTPExchangeKind": {
+        "description": "ExchangeKind is what an observed HTTP exchange was, by its endpoint\n- model_inference: KindModelInference is POST /v1/messages: the model generated a reply\n- token_count: KindTokenCount is POST /v1/messages/count_tokens: an estimate of the input tokens of a request, no generation\n- other_api: KindOtherAPI is any other path that went through the proxy\n- transport_error: KindTransportError is an exchange that got no upstream response",
+        "enum": [
+          "model_inference",
+          "token_count",
+          "other_api",
+          "transport_error"
+        ],
+        "type": "string"
+      },
+      "HTTPExchangeState": {
+        "description": "Exchange states: what the proxy observed of an exchange\n- partial: ExchangePartial: the response ended without its normal end (stream without message_stop, body read error), or the request body was not read whole\n- aborted: ExchangeAborted: the client went away before the response ended\n- failed: ExchangeFailed: no upstream response (connection, timeout)\n- interrupted: ExchangeInterrupted: the server stopped before the exchange ended",
+        "enum": [
+          "in_progress",
+          "complete",
+          "partial",
+          "aborted",
+          "failed",
+          "interrupted"
+        ],
+        "type": "string"
+      },
+      "HTTPExchangesResponse": {
+        "description": "HTTPExchangesResponse is a page of exchanges in run order",
+        "properties": {
+          "exchanges": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPExchange"
+            },
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exchanges",
+          "total",
+          "hasMore"
+        ],
+        "type": "object"
+      },
+      "HTTPHeader": {
+        "description": "HTTPHeader is a header as stored: secret values are never stored",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "redacted": {
+            "description": "Redacted: the value was replaced (credentials, cookies)",
+            "type": "boolean"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "redacted"
+        ],
+        "type": "object"
+      },
+      "HTTPInspectorStatus": {
+        "description": "HTTPInspectorStatus describes the HTTP capture proxy (GET\n/api/http-inspector/status). It never contains credentials.",
+        "properties": {
+          "activeRuns": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "bytesForwarded": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "bytesStored": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "captureDir": {
+            "description": "CaptureDir holds the stored bodies",
+            "type": "string"
+          },
+          "captureMode": {
+            "$ref": "#/components/schemas/HTTPCaptureMode"
+          },
+          "degraded": {
+            "description": "Degraded: some capture was lost since the start",
+            "type": "boolean"
+          },
+          "droppedRecords": {
+            "description": "DroppedRecords are capture records lost because the queue was full;\nLostBodyBytes body bytes not captured because the capture buffer was\nfull; StoreErrors failed writes. Traffic continued in all cases.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "enabled": {
+            "description": "Enabled: the proxy runs with this server",
+            "type": "boolean"
+          },
+          "exchanges": {
+            "description": "Counters since the server started",
+            "format": "int64",
+            "type": "integer"
+          },
+          "host": {
+            "description": "Host and Port of the shared listener (Port 0: none, launcher runs only)",
+            "type": "string"
+          },
+          "inFlight": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "lostBodyBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "manualRunId": {
+            "description": "ManualRunID is the run of the shared listener",
+            "type": "string"
+          },
+          "maxBodyBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "parseErrors": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "port": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "proxyUrl": {
+            "description": "ProxyURL is the value for ANTHROPIC_BASE_URL (empty without a shared\nlistener)",
+            "type": "string"
+          },
+          "queueSize": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "retentionDays": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sseEvents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "storageLimit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "storeErrors": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "upstream": {
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "host",
+          "port",
+          "upstream",
+          "captureMode",
+          "maxBodyBytes",
+          "queueSize",
+          "retentionDays",
+          "storageLimit",
+          "activeRuns",
+          "exchanges",
+          "inFlight",
+          "bytesForwarded",
+          "bytesStored",
+          "sseEvents",
+          "droppedRecords",
+          "lostBodyBytes",
+          "storeErrors",
+          "parseErrors",
+          "degraded",
+          "warnings"
+        ],
+        "type": "object"
+      },
+      "HTTPLifecycleEvent": {
+        "description": "HTTPLifecycleEvent is a transport event of an exchange",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "event": {
+            "description": "Event: request_started, request_body_observed, upstream_connected,\nresponse_headers_received, response_streaming, completed,\nupstream_error, client_aborted, upstream_aborted, capture_degraded,\nstream_parse_error",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "at"
+        ],
+        "type": "object"
+      },
+      "HTTPRequestDiffResponse": {
+        "description": "HTTPRequestDiffResponse compares a request with an earlier one of the\nsame session and kind",
+        "properties": {
+          "comparedBy": {
+            "description": "ComparedBy says how the previous exchange was chosen:\nsame_conversation (equal first message), same_model,\nprevious_in_session, none",
+            "type": "string"
+          },
+          "diff": {
+            "$ref": "#/components/schemas/WireRequestDiff"
+          },
+          "exchangeId": {
+            "type": "string"
+          },
+          "previousId": {
+            "description": "PreviousID is the compared exchange (empty: none, everything is new)",
+            "type": "string"
+          },
+          "previousSeq": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exchangeId",
+          "comparedBy",
+          "diff"
+        ],
+        "type": "object"
+      },
+      "HTTPRunDetail": {
+        "description": "HTTPRunDetail is a run with its summary",
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/HTTPCaptureRun"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HTTPTrafficSummary"
+          }
+        },
+        "required": [
+          "run",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "HTTPSSEEvent": {
+        "description": "HTTPSSEEvent is one Server-Sent Event of a streamed response",
+        "properties": {
+          "byteLen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "byteOffset": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "description": "Data is the event's data (redacted in safe mode, empty in\nmetadata_only)",
+            "type": "string"
+          },
+          "dataBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "deltaType": {
+            "type": "string"
+          },
+          "event": {
+            "description": "Event is the event: field; Type the JSON \"type\"",
+            "type": "string"
+          },
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          },
+          "offsetMs": {
+            "description": "OffsetMs is the time since the request started",
+            "format": "double",
+            "type": "number"
+          },
+          "parseStatus": {
+            "$ref": "#/components/schemas/WireParseStatus"
+          },
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "offsetMs",
+          "byteOffset",
+          "byteLen",
+          "type",
+          "parseStatus",
+          "dataBytes",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "HTTPSSEEventsResponse": {
+        "description": "HTTPSSEEventsResponse is a page of an exchange's SSE events in order",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPSSEEvent"
+            },
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "types": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Types counts all events of the exchange by type",
+            "type": "object"
+          }
+        },
+        "required": [
+          "events",
+          "total",
+          "hasMore",
+          "types"
+        ],
+        "type": "object"
+      },
+      "HTTPSessionTrafficResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HTTPExchangesResponse"
+          },
+          {
+            "properties": {
+              "comparison": {
+                "$ref": "#/components/schemas/HTTPSourceComparison"
+              },
+              "runs": {
+                "description": "Runs that carried the session's exchanges",
+                "items": {
+                  "$ref": "#/components/schemas/HTTPCaptureRun"
+                },
+                "type": "array"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/HTTPTrafficSummary"
+              }
+            },
+            "required": [
+              "sessionId",
+              "summary",
+              "runs"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": "HTTPSessionTrafficResponse is the API traffic of a Claude Code session\n(GET /api/sessions/{sessionId}/http-exchanges)"
+      },
+      "HTTPSourceComparison": {
+        "description": "HTTPSourceComparison sets the proxy's usage of a session beside what\nOTLP and session files recorded, without adding them up",
+        "properties": {
+          "certainty": {
+            "description": "Certainty: exact (every inference exchange matched), partial, none",
+            "type": "string"
+          },
+          "matchedRequests": {
+            "description": "MatchedRequests: exchanges whose request-id also appears in the\nsession's telemetry (same model request seen by both)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          },
+          "proxyInputTokens": {
+            "description": "ProxyInputTokens / ProxyOutputTokens: the proxy's final usage\n(input = uncached + cache read + cache write)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "proxyOutputTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "selected": {
+            "description": "Selected is the source of the session totals shown elsewhere in AI\nObserver (otlp/local_jsonl, unchanged by the proxy)",
+            "type": "string"
+          },
+          "telemetryCostUsd": {
+            "format": "double",
+            "type": "number"
+          },
+          "telemetryInputTokens": {
+            "description": "Telemetry usage of the session (OTLP or session file, deduplicated\nby AI Observer's existing rules); nil when unknown",
+            "format": "int64",
+            "type": "integer"
+          },
+          "telemetryOutputTokens": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selected",
+          "proxyInputTokens",
+          "proxyOutputTokens",
+          "matchedRequests",
+          "certainty",
+          "note"
+        ],
+        "type": "object"
+      },
+      "HTTPTokenTotals": {
+        "description": "HTTPTokenTotals are summed usage fields; CacheReadShare is cache reads\nover total input tokens",
+        "properties": {
+          "cacheRead": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "cacheReadShare": {
+            "format": "double",
+            "type": "number"
+          },
+          "cacheWrite": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "cacheWrite1h": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "cacheWrite5m": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "cacheWriteOther": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "exchanges": {
+            "description": "Exchanges counted",
+            "format": "int64",
+            "type": "integer"
+          },
+          "input": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "output": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalInput": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalProcessed": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input",
+          "output",
+          "cacheRead",
+          "cacheWrite",
+          "cacheWrite5m",
+          "cacheWrite1h",
+          "cacheWriteOther",
+          "totalInput",
+          "totalProcessed",
+          "exchanges"
+        ],
+        "type": "object"
+      },
+      "HTTPToolLink": {
+        "description": "HTTPToolLink is a tool use requested by a reply and the request that\ncarried its result",
+        "properties": {
+          "evidence": {
+            "description": "Evidence names how the link was made",
+            "type": "string"
+          },
+          "input": {
+            "description": "Input is the tool's arguments (redacted; empty in metadata_only)",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "resultBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "resultExchangeId": {
+            "description": "ResultExchangeID is the first exchange whose request carried the\ntool_result with this ID",
+            "type": "string"
+          },
+          "resultIsError": {
+            "type": "boolean"
+          },
+          "resultPreview": {
+            "type": "string"
+          },
+          "resultSeq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HTTPToolLinkStatus",
+            "description": "Status: matched, pending, unresolved, ambiguous"
+          },
+          "toolUseId": {
+            "type": "string"
+          },
+          "useExchangeId": {
+            "description": "UseExchangeID is the exchange whose reply requested the tool",
+            "type": "string"
+          },
+          "useSeq": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "toolUseId",
+          "resultIsError",
+          "resultBytes",
+          "status",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "HTTPToolLinkStatus": {
+        "description": "Correlation states of a tool use",
+        "enum": [
+          "matched",
+          "pending",
+          "unresolved",
+          "ambiguous"
+        ],
+        "type": "string"
+      },
+      "HTTPToolLinksResponse": {
+        "description": "HTTPToolLinksResponse lists a run's tool uses in order",
+        "properties": {
+          "note": {
+            "description": "Note reminds that local execution is not observed",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPToolLink"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools",
+          "note"
+        ],
+        "type": "object"
+      },
+      "HTTPTrafficSummary": {
+        "description": "HTTPTrafficSummary aggregates exchanges (a run, or a session)",
+        "properties": {
+          "costStatus": {
+            "$ref": "#/components/schemas/HTTPCostStatus"
+          },
+          "costUsd": {
+            "description": "CostUSD is the estimated API-equivalent cost of the priced exchanges;\nCostStatus is partial when some were not priced",
+            "format": "double",
+            "type": "number"
+          },
+          "countedTokens": {
+            "description": "CountedTokens sums count_tokens results (estimates, not usage)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "degraded": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "durationMs": {
+            "description": "DurationMs from the first request to the last response",
+            "format": "int64",
+            "type": "integer"
+          },
+          "errors": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "exchanges": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "firstAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "inProgress": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inference": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "lastAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "other": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "partial": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "partialTokens": {
+            "$ref": "#/components/schemas/HTTPTokenTotals"
+          },
+          "retries": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "streams": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "tokenCounts": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/HTTPTokenTotals",
+            "description": "Tokens of inference exchanges with final usage; PartialTokens of\nthose with partial usage, kept apart"
+          }
+        },
+        "required": [
+          "exchanges",
+          "inference",
+          "tokenCounts",
+          "other",
+          "errors",
+          "retries",
+          "partial",
+          "inProgress",
+          "streams",
+          "tokens",
+          "partialTokens",
+          "countedTokens",
+          "costUsd",
+          "costStatus",
+          "durationMs",
+          "models",
+          "degraded"
+        ],
+        "type": "object"
+      },
+      "HTTPUsage": {
+        "description": "HTTPUsage is the token usage of an exchange: the API's usage object,\nnormalized (nil: not reported, never 0), with derived totals and the\nestimated API-equivalent cost",
+        "properties": {
+          "costReason": {
+            "type": "string"
+          },
+          "costStatus": {
+            "$ref": "#/components/schemas/HTTPCostStatus"
+          },
+          "costUsd": {
+            "description": "CostUSD is the API-equivalent cost estimated from the price catalog\n(not a subscription charge); nil when not estimable",
+            "format": "double",
+            "type": "number"
+          },
+          "countTokens": {
+            "description": "CountTokens is the input_tokens of a count_tokens response: an\nestimate, not inference usage",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pricedModel": {
+            "description": "PricedModel is the catalog model the cost used",
+            "type": "string"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/HTTPUsageQuality",
+            "description": "Quality: final (complete response), partial (interrupted: the last\ncumulative values observed), unavailable (no usage)"
+          },
+          "source": {
+            "description": "Source is always http_proxy: captured on the wire",
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/WireUsageTotals"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/WireUsage"
+          }
+        },
+        "required": [
+          "usage",
+          "totals",
+          "quality",
+          "costStatus",
+          "source"
+        ],
+        "type": "object"
+      },
+      "HTTPUsageDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/HTTPUsage"
+          },
+          {
+            "properties": {
+              "costComponents": {
+                "description": "CostComponents itemize the estimated cost",
+                "items": {
+                  "$ref": "#/components/schemas/HTTPCostComponent"
+                },
+                "type": "array"
+              },
+              "exchangeId": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/HTTPExchangeKind"
+              },
+              "model": {
+                "type": "string"
+              },
+              "snapshots": {
+                "description": "Snapshots are the usage objects of the stream in order (cumulative)",
+                "items": {
+                  "$ref": "#/components/schemas/WireUsageSnapshot"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "exchangeId",
+              "kind",
+              "snapshots",
+              "costComponents"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": "HTTPUsageDetail is the usage of one exchange with its stream snapshots"
+      },
+      "HTTPUsageQuality": {
+        "description": "Usage quality of an exchange",
+        "enum": [
+          "final",
+          "partial",
+          "unavailable"
+        ],
+        "type": "string"
       },
       "HealthResponse": {
         "description": "HealthResponse is the answer of GET /health (liveness): always \"ok\" while\nthe server answers",
@@ -1629,6 +2978,10 @@
           "gitCommit": {
             "type": "string"
           },
+          "httpInspector": {
+            "$ref": "#/components/schemas/HTTPInspectorStatus",
+            "description": "HTTPInspector describes the HTTP capture proxy (enabled false when it\ndoes not run); never credentials"
+          },
           "imports": {
             "items": {
               "$ref": "#/components/schemas/StatusImport"
@@ -1680,7 +3033,8 @@
           "telemetry",
           "settings",
           "pricing",
-          "imports"
+          "imports",
+          "httpInspector"
         ],
         "type": "object"
       },
@@ -2305,6 +3659,18 @@
         },
         "type": "object"
       },
+      "UpdateHTTPCaptureRunRequest": {
+        "description": "UpdateHTTPCaptureRunRequest renames a run or sets its note; omitted\nfields stay",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "UpdateWidgetPositionsRequest": {
         "description": "UpdateWidgetPositionsRequest moves widgets of a dashboard",
         "properties": {
@@ -2370,11 +3736,12 @@
         "type": "object"
       },
       "WebSocketMessageType": {
-        "description": "What a real-time message announces: stored spans, metric points or log records",
+        "description": "What a real-time message announces: stored spans, metric points, log records or HTTP capture exchanges\n- http_exchanges: MessageTypeHTTPExchanges announces HTTP capture exchanges stored or updated (service \"http-proxy\")",
         "enum": [
           "traces",
           "metrics",
-          "logs"
+          "logs",
+          "http_exchanges"
         ],
         "type": "string"
       },
@@ -2425,6 +3792,866 @@
           "id",
           "gridColumn",
           "gridRow"
+        ],
+        "type": "object"
+      },
+      "WireAPIError": {
+        "description": "APIError is an error object of the API: {\"type\":\"error\",\"error\":{...}}\nas a JSON body or as an SSE error event",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "raw": {},
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ],
+        "type": "object"
+      },
+      "WireCacheBreakpoint": {
+        "description": "CacheBreakpoint is a cache_control marker in a request",
+        "properties": {
+          "location": {
+            "description": "Location such as \"system[1]\", \"tools[12]\", \"messages[4].content[0]\"",
+            "type": "string"
+          },
+          "ttl": {
+            "description": "TTL is cache_control.ttl (\"5m\", \"1h\"), empty when not given",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      },
+      "WireCertainty": {
+        "description": "Certainty of an observation: what the wire showed, or a conclusion drawn\nfrom it",
+        "enum": [
+          "observed",
+          "inferred"
+        ],
+        "type": "string"
+      },
+      "WireContentBlock": {
+        "description": "ContentBlock is a content block of a message, as received or\nreconstructed from content_block_* events",
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "id": {
+            "description": "ID, Name, Input of tool_use, server_tool_use and mcp_tool_use blocks.\nIn a stream Input is set only when the concatenated input_json_delta\nfragments (PartialInput) form valid JSON; InputError says why not.",
+            "type": "string"
+          },
+          "index": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "input": {},
+          "inputComplete": {
+            "type": "boolean"
+          },
+          "inputError": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "partialInput": {
+            "type": "string"
+          },
+          "raw": {
+            "description": "Raw is the block as received (content_block_start's block, or the\nblock of a JSON message), with fields this type does not know"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "stopped": {
+            "description": "Stopped is set when content_block_stop was received (streams), or for\nblocks of a complete JSON message",
+            "type": "boolean"
+          },
+          "text": {
+            "description": "Text of text blocks",
+            "type": "string"
+          },
+          "thinking": {
+            "description": "Thinking and Signature of thinking blocks; Data of redacted_thinking\nblocks (opaque, never interpreted)",
+            "type": "string"
+          },
+          "toolUseId": {
+            "description": "ToolUseID of result blocks such as web_search_tool_result",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "type",
+          "stopped"
+        ],
+        "type": "object"
+      },
+      "WireDecodeStatus": {
+        "description": "Body decoding status (DecodeBody)\n- identity: no content coding: the bytes as they are\n- decoded: decoded from the listed codings\n- unsupported: a coding this package cannot decode\n- error: corrupt data\n- truncated: decoded output exceeded the limit",
+        "enum": [
+          "identity",
+          "decoded",
+          "unsupported",
+          "error",
+          "truncated"
+        ],
+        "type": "string"
+      },
+      "WireFieldChange": {
+        "description": "FieldChange is a request parameter that differs between two requests\n(JSON values; empty when absent)",
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field"
+        ],
+        "type": "object"
+      },
+      "WireMessage": {
+        "description": "Message is a reply of POST /v1/messages: parsed from a JSON body, or\nreconstructed from its SSE events",
+        "properties": {
+          "complete": {
+            "description": "Complete: a JSON message was parsed whole, or a stream reached\nmessage_stop with every started block stopped. An interrupted stream\nis never complete, even when it has content.",
+            "type": "boolean"
+          },
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/WireContentBlock"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/WireAPIError",
+            "description": "Error is an error object (JSON error body, or SSE error event)"
+          },
+          "eventCounts": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "EventCounts counts the stream's events by type",
+            "type": "object"
+          },
+          "extra": {
+            "additionalProperties": {},
+            "description": "Extra holds top-level fields this type does not know",
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "notes": {
+            "description": "Notes are parse problems (invalid JSON, unexpected order, ...)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "role": {
+            "type": "string"
+          },
+          "sawMessageStart": {
+            "description": "SawMessageStart, SawMessageStop: stream framing observed",
+            "type": "boolean"
+          },
+          "sawMessageStop": {
+            "type": "boolean"
+          },
+          "stopReason": {
+            "type": "string"
+          },
+          "stopSequence": {
+            "type": "string"
+          },
+          "streamed": {
+            "description": "Streamed tells whether the message came from SSE events",
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/WireUsage"
+          },
+          "usageSnapshots": {
+            "description": "UsageSnapshots are the usage objects of a stream in order (cumulative:\nthe last one is the reference, they are never added up)",
+            "items": {
+              "$ref": "#/components/schemas/WireUsageSnapshot"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "content",
+          "usage",
+          "streamed",
+          "sawMessageStart",
+          "sawMessageStop",
+          "complete"
+        ],
+        "type": "object"
+      },
+      "WireMessagesSummary": {
+        "description": "MessagesSummary describes the messages array of a request",
+        "properties": {
+          "blocks": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "hashes": {
+            "description": "Hashes are the SHA-256 (hex, first 16 characters) of each message's\nJSON bytes as sent, in order, for prefix comparison (DiffRequests)",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "roles": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Roles counts messages by role; Blocks counts content blocks by type\n(a string content counts as one \"text\" block)",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "sizes": {
+            "description": "Sizes are the JSON bytes of each message",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "count",
+          "roles",
+          "blocks",
+          "bytes",
+          "hashes",
+          "sizes"
+        ],
+        "type": "object"
+      },
+      "WireObservation": {
+        "description": "Observation is one evidence-based statement about an exchange, for the\ndidactic view. Text is Brazilian Portuguese; it states what the wire\nshowed, never what the model \"thought\" or what the client did locally.",
+        "properties": {
+          "certainty": {
+            "$ref": "#/components/schemas/WireCertainty"
+          },
+          "code": {
+            "description": "Code is a stable identifier: assistant_text, tool_use,\nassistant_thinking_available, server_tool_event, stop_reason,\napi_error, tool_result_submitted, context_change, cache_breakpoint,\ntool_definitions_provided, token_count, other_api, transport_error,\nstream_partial, possible_compaction, unknown",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Evidence names the fields the statement is based on, such as\n\"response.content[1].type=tool_use\"",
+            "type": "string"
+          },
+          "side": {
+            "description": "Side is \"request\", \"response\" or \"transport\"",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "side",
+          "certainty",
+          "text",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "WireParseStatus": {
+        "description": "Parse status of a stream event's data (StreamEvent.ParseStatus)\n- empty: no data\n- truncated: data cut by the parser's limit\n- mismatch: event: field differs from the JSON \"type\"",
+        "enum": [
+          "ok",
+          "invalid_json",
+          "empty",
+          "truncated",
+          "mismatch",
+          "unexpected"
+        ],
+        "type": "string"
+      },
+      "WireRequestDiff": {
+        "description": "RequestDiff compares a request with an earlier one (DiffRequests). It\nworks on the summaries' fingerprints, never on the bodies, so its cost\ndoes not grow with the size of the conversation.",
+        "properties": {
+          "cacheBreakpointsAfter": {
+            "items": {
+              "$ref": "#/components/schemas/WireCacheBreakpoint"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cacheBreakpointsBefore": {
+            "items": {
+              "$ref": "#/components/schemas/WireCacheBreakpoint"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cacheChanged": {
+            "type": "boolean"
+          },
+          "commonPrefix": {
+            "description": "CommonPrefix is the number of leading messages with equal hashes",
+            "format": "int64",
+            "type": "integer"
+          },
+          "messagesAdded": {
+            "description": "MessagesAdded are the messages after the common prefix in the later\nrequest; MessagesReplaced the earlier request's messages after it\n(history rewritten, e.g. by compaction)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "messagesAfter": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "messagesBefore": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "messagesReplaced": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "modelAfter": {
+            "type": "string"
+          },
+          "modelBefore": {
+            "type": "string"
+          },
+          "modelChanged": {
+            "type": "boolean"
+          },
+          "newBytes": {
+            "description": "NewBytes are the JSON bytes of the added messages, RepeatedBytes those\nof the common prefix (history sent again)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "newToolResults": {
+            "description": "NewToolResults are tool_use IDs of tool_result blocks that the earlier\nrequest did not carry",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "paramChanges": {
+            "items": {
+              "$ref": "#/components/schemas/WireFieldChange"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "possibleCompaction": {
+            "description": "PossibleCompaction: the history was rewritten (common prefix shorter\nthan the earlier request) and the message count dropped. A hint, not\na certainty.",
+            "type": "boolean"
+          },
+          "repeatedBytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "systemBytesAfter": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "systemBytesBefore": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "systemChanged": {
+            "type": "boolean"
+          },
+          "systemSha256After": {
+            "type": "string"
+          },
+          "toolsAdded": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "toolsBytesAfter": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "toolsBytesBefore": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "toolsChanged": {
+            "type": "boolean"
+          },
+          "toolsCountAfter": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "toolsCountBefore": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "toolsModified": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "toolsRemoved": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "modelChanged",
+          "paramChanges",
+          "systemChanged",
+          "systemBytesBefore",
+          "systemBytesAfter",
+          "toolsChanged",
+          "toolsBytesBefore",
+          "toolsBytesAfter",
+          "toolsAdded",
+          "toolsRemoved",
+          "toolsModified",
+          "toolsCountBefore",
+          "toolsCountAfter",
+          "messagesBefore",
+          "messagesAfter",
+          "commonPrefix",
+          "messagesAdded",
+          "messagesReplaced",
+          "newBytes",
+          "repeatedBytes",
+          "newToolResults",
+          "cacheBreakpointsBefore",
+          "cacheBreakpointsAfter",
+          "cacheChanged",
+          "possibleCompaction"
+        ],
+        "type": "object"
+      },
+      "WireRequestSummary": {
+        "description": "RequestSummary is what ParseRequest reads from a Messages API request\nbody (also count_tokens requests, which share the shape)",
+        "properties": {
+          "cacheBreakpoints": {
+            "items": {
+              "$ref": "#/components/schemas/WireCacheBreakpoint"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "contextManagement": {},
+          "maxTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "messages": {
+            "$ref": "#/components/schemas/WireMessagesSummary"
+          },
+          "metadata": {},
+          "model": {
+            "type": "string"
+          },
+          "outputConfig": {},
+          "parseError": {
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "SessionID is the session_id in metadata.user_id (a JSON string with\n\"session_id\", or the legacy \"..._session_\u003cid\u003e\" form); empty otherwise",
+            "type": "string"
+          },
+          "stopSequences": {},
+          "stream": {
+            "type": "boolean"
+          },
+          "system": {
+            "$ref": "#/components/schemas/WireSystemSummary"
+          },
+          "temperature": {
+            "format": "double",
+            "type": "number"
+          },
+          "thinking": {
+            "description": "Raw JSON of fields shown as they are"
+          },
+          "toolChoice": {},
+          "toolResults": {
+            "items": {
+              "$ref": "#/components/schemas/WireToolResultRef"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "toolUses": {
+            "description": "ToolUses are the tool_use blocks in the request's history",
+            "items": {
+              "$ref": "#/components/schemas/WireToolUseRef"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "tools": {
+            "$ref": "#/components/schemas/WireToolsSummary"
+          },
+          "topK": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "topP": {
+            "format": "double",
+            "type": "number"
+          },
+          "unknownFields": {
+            "description": "UnknownFields are the top-level keys not in KnownRequestFields, in\norder of appearance",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "valid": {
+            "description": "Valid is false when the body is not a JSON object; ParseError says why",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "system",
+          "tools",
+          "messages",
+          "toolResults",
+          "toolUses",
+          "cacheBreakpoints",
+          "unknownFields"
+        ],
+        "type": "object"
+      },
+      "WireSystemSummary": {
+        "description": "SystemSummary describes the system field of a request",
+        "properties": {
+          "blocks": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "bytes": {
+            "description": "Bytes of the system field's JSON, SHA256 of those bytes (hex)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "description": "Kind is \"string\" or \"blocks\"",
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "present",
+          "blocks",
+          "bytes"
+        ],
+        "type": "object"
+      },
+      "WireToolDef": {
+        "description": "ToolDef is one entry of a request's tools array",
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "deferLoading": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is set for server/versioned tools (e.g. web_search_20250305)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "bytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "WireToolResultRef": {
+        "description": "ToolResultRef is a tool_result block of a request",
+        "properties": {
+          "blockIndex": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "contentBytes": {
+            "description": "ContentBytes is the size of the block's content JSON",
+            "format": "int64",
+            "type": "integer"
+          },
+          "isError": {
+            "type": "boolean"
+          },
+          "messageIndex": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "preview": {
+            "description": "Preview is the start of the result's text (at most 300 bytes, cut at\na UTF-8 boundary); callers sanitize it before storing",
+            "type": "string"
+          },
+          "toolUseId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "toolUseId",
+          "isError",
+          "messageIndex",
+          "blockIndex",
+          "contentBytes"
+        ],
+        "type": "object"
+      },
+      "WireToolUseRef": {
+        "description": "ToolUseRef is a tool_use block found in a request's history or a reply",
+        "properties": {
+          "blockIndex": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input": {},
+          "messageIndex": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "messageIndex",
+          "blockIndex"
+        ],
+        "type": "object"
+      },
+      "WireToolsSummary": {
+        "description": "ToolsSummary describes the tools array of a request",
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "deferred": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/WireToolDef"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "count",
+          "deferred",
+          "bytes",
+          "tools"
+        ],
+        "type": "object"
+      },
+      "WireUsage": {
+        "description": "Usage is a usage object of the Messages API, normalized. A nil field was\nnot reported: never treat it as 0.",
+        "properties": {
+          "cacheCreation1h": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "cacheCreation5m": {
+            "description": "CacheCreation5m and CacheCreation1h are usage.cache_creation.\nephemeral_5m_input_tokens / ephemeral_1h_input_tokens: parts of\nCacheCreationInputTokens, never added to it again",
+            "format": "int64",
+            "type": "integer"
+          },
+          "cacheCreationInputTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "cacheReadInputTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inputTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "raw": {
+            "description": "Raw is the usage object as received (for a stream, the last one\nobserved, see Message.UsageSnapshots)"
+          },
+          "serviceTier": {
+            "description": "ServiceTier is usage.service_tier, when present",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "WireUsageSnapshot": {
+        "description": "UsageSnapshot is a usage object observed in a stream, in order",
+        "properties": {
+          "eventSeq": {
+            "description": "EventSeq is the SSE event the usage came from",
+            "format": "int64",
+            "type": "integer"
+          },
+          "eventType": {
+            "description": "EventType is message_start or message_delta (or another type that\ncarried usage)",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/WireUsage",
+            "description": "Usage is the cumulative usage after this event (merged snapshot)"
+          }
+        },
+        "required": [
+          "eventSeq",
+          "eventType",
+          "usage"
+        ],
+        "type": "object"
+      },
+      "WireUsageTotals": {
+        "description": "UsageTotals are the totals derived from a Usage by the documented rules:\n\n\ttotal_input     = input_tokens + cache_read_input_tokens + cache_creation_input_tokens\n\ttotal_processed = total_input + output_tokens\n\tcache_read_share = cache_read_input_tokens / total_input (total_input \u003e 0)\n\nA total is nil when its first term (input_tokens, resp. total_input and\noutput_tokens) is nil; absent cache fields are not counted, and Complete\ntells whether all three input fields were reported.",
+        "properties": {
+          "cacheReadShare": {
+            "format": "double",
+            "type": "number"
+          },
+          "cacheWriteUnknown": {
+            "description": "CacheWriteUnknown is cache_creation_input_tokens minus the 5m and 1h\nparts, when all three are known and it is above 0: cache writes whose\nduration the API did not report. When neither part was reported it\nis all of cache_creation_input_tokens (if above 0).",
+            "format": "int64",
+            "type": "integer"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "totalInput": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "totalProcessed": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "complete"
         ],
         "type": "object"
       }
@@ -3307,6 +5534,1126 @@
         "summary": "Change a widget (the fields the body sets)",
         "tags": [
           "dashboards"
+        ]
+      }
+    },
+    "/api/http-inspector/exchanges/{exchangeId}": {
+      "get": {
+        "operationId": "getApiHttpInspectorExchangesByExchangeId",
+        "parameters": [
+          {
+            "description": "Exchange ID",
+            "in": "path",
+            "name": "exchangeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPExchangeDetail"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "An exchange with its transport lifecycle and observations",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/exchanges/{exchangeId}/diff": {
+      "get": {
+        "operationId": "getApiHttpInspectorExchangesByExchangeIdDiff",
+        "parameters": [
+          {
+            "description": "Exchange ID",
+            "in": "path",
+            "name": "exchangeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPRequestDiffResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "The request compared with the previous one of the same run, kind and session (Context Diff)",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/exchanges/{exchangeId}/events": {
+      "get": {
+        "operationId": "getApiHttpInspectorExchangesByExchangeIdEvents",
+        "parameters": [
+          {
+            "description": "Exchange ID",
+            "in": "path",
+            "name": "exchangeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only events of this type (such as content_block_delta)",
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size; larger values are reduced to the maximum",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 500,
+              "maximum": 2000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "nextCursor of the previous page",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Rows to skip (deprecated: page with cursor)",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPSSEEventsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The query took longer than the request timeout (5 seconds); not worth retrying"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "A page of a streamed response's Server-Sent Events in order",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/exchanges/{exchangeId}/request": {
+      "get": {
+        "operationId": "getApiHttpInspectorExchangesByExchangeIdRequest",
+        "parameters": [
+          {
+            "description": "Exchange ID",
+            "in": "path",
+            "name": "exchangeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "safe (redacted) or raw (as observed, full_raw mode only)",
+            "in": "query",
+            "name": "variant",
+            "schema": {
+              "$ref": "#/components/schemas/HTTPBodyVariant",
+              "default": "safe"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPExchangeBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "An exchange's request: headers (credentials redacted), body and interpretation",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/exchanges/{exchangeId}/response": {
+      "get": {
+        "operationId": "getApiHttpInspectorExchangesByExchangeIdResponse",
+        "parameters": [
+          {
+            "description": "Exchange ID",
+            "in": "path",
+            "name": "exchangeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "safe (redacted) or raw (as observed, full_raw mode only)",
+            "in": "query",
+            "name": "variant",
+            "schema": {
+              "$ref": "#/components/schemas/HTTPBodyVariant",
+              "default": "safe"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPExchangeBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "An exchange's response: headers, body and interpretation",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/exchanges/{exchangeId}/usage": {
+      "get": {
+        "operationId": "getApiHttpInspectorExchangesByExchangeIdUsage",
+        "parameters": [
+          {
+            "description": "Exchange ID",
+            "in": "path",
+            "name": "exchangeId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPUsageDetail"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "An exchange's token usage, stream snapshots and estimated cost",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/runs": {
+      "get": {
+        "operationId": "getApiHttpInspectorRuns",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "mode",
+            "schema": {
+              "$ref": "#/components/schemas/HTTPCaptureRunMode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "$ref": "#/components/schemas/HTTPCaptureRunState"
+            }
+          },
+          {
+            "description": "Page size; larger values are reduced to the maximum",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "nextCursor of the previous page",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Rows to skip (deprecated: page with cursor)",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPCaptureRunsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The query took longer than the request timeout (5 seconds); not worth retrying"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "A page of capture runs, the newest first",
+        "tags": [
+          "http-inspector"
+        ]
+      },
+      "post": {
+        "operationId": "postApiHttpInspectorRuns",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHTTPCaptureRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPCaptureRunCreated"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The HTTP capture proxy is not enabled"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "Start a launcher run with a proxy port of its own (ai-observer run)",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/runs/{runId}": {
+      "delete": {
+        "operationId": "deleteApiHttpInspectorRunsByRunId",
+        "parameters": [
+          {
+            "description": "Capture run ID",
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The run is active"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "Delete a finished capture run with its stored bodies",
+        "tags": [
+          "http-inspector"
+        ]
+      },
+      "get": {
+        "operationId": "getApiHttpInspectorRunsByRunId",
+        "parameters": [
+          {
+            "description": "Capture run ID",
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPRunDetail"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "A capture run with its summary",
+        "tags": [
+          "http-inspector"
+        ]
+      },
+      "put": {
+        "operationId": "putApiHttpInspectorRunsByRunId",
+        "parameters": [
+          {
+            "description": "Capture run ID",
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHTTPCaptureRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPCaptureRun"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "Rename a capture run or set its note (omitted fields stay)",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/runs/{runId}/exchanges": {
+      "get": {
+        "operationId": "getApiHttpInspectorRunsByRunIdExchanges",
+        "parameters": [
+          {
+            "description": "Capture run ID",
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "$ref": "#/components/schemas/HTTPExchangeKind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "$ref": "#/components/schemas/HTTPExchangeState"
+            }
+          },
+          {
+            "description": "error (status \u003e= 400 or none), ok, or an HTTP status code",
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Requested or response model",
+            "in": "query",
+            "name": "model",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Streamed responses only (true) or not streamed only (false)",
+            "in": "query",
+            "name": "stream",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "A tool name the reply requested",
+            "in": "query",
+            "name": "tool",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Text the path, headline, models, session or request ID contain (case-insensitive)",
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "At least this many processed tokens",
+            "in": "query",
+            "name": "minTokens",
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Start of the range (RFC 3339); default: open",
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "End of the range (RFC 3339); default: open",
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size; larger values are reduced to the maximum",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "nextCursor of the previous page",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Rows to skip (deprecated: page with cursor)",
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPExchangesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The query took longer than the request timeout (5 seconds); not worth retrying"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "A page of a run's exchanges in arrival order",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/runs/{runId}/export": {
+      "get": {
+        "operationId": "getApiHttpInspectorRunsByRunIdExport",
+        "parameters": [
+          {
+            "description": "Capture run ID",
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {}
+            },
+            "description": "Zip archive"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "A zip of the run's records and redacted bodies (never raw bodies or credentials)",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/runs/{runId}/finish": {
+      "post": {
+        "operationId": "postApiHttpInspectorRunsByRunIdFinish",
+        "parameters": [
+          {
+            "description": "Capture run ID",
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishHTTPCaptureRunRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPCaptureRun"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The HTTP capture proxy is not enabled"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "End a capture run (its proxy port closes)",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/runs/{runId}/tools": {
+      "get": {
+        "operationId": "getApiHttpInspectorRunsByRunIdTools",
+        "parameters": [
+          {
+            "description": "Capture run ID",
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPToolLinksResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "A run's tool uses and the requests that carried their results",
+        "tags": [
+          "http-inspector"
+        ]
+      }
+    },
+    "/api/http-inspector/status": {
+      "get": {
+        "operationId": "getApiHttpInspectorStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPInspectorStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "The HTTP capture proxy: configuration and counters (never credentials)",
+        "tags": [
+          "http-inspector"
         ]
       }
     },
@@ -4261,6 +7608,167 @@
         "summary": "A page of sessions, the most recently active first",
         "tags": [
           "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{sessionId}/http-exchanges": {
+      "get": {
+        "description": "Exchanges of all runs that carried the session ID, in start order, with a summary and a comparison with the session's telemetry (never added up).",
+        "operationId": "getApiSessionsBySessionIdHttpExchanges",
+        "parameters": [
+          {
+            "description": "Claude Code session ID",
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "$ref": "#/components/schemas/HTTPExchangeKind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "$ref": "#/components/schemas/HTTPExchangeState"
+            }
+          },
+          {
+            "description": "error (status \u003e= 400 or none), ok, or an HTTP status code",
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Requested or response model",
+            "in": "query",
+            "name": "model",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Streamed responses only (true) or not streamed only (false)",
+            "in": "query",
+            "name": "stream",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "A tool name the reply requested",
+            "in": "query",
+            "name": "tool",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Text the path, headline, models, session or request ID contain (case-insensitive)",
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "At least this many processed tokens",
+            "in": "query",
+            "name": "minTokens",
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Start of the range (RFC 3339); default: open",
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "End of the range (RFC 3339); default: open",
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page size; larger values are reduced to the maximum",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "nextCursor of the previous page",
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPSessionTrafficResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid parameters, named in the message"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The query took longer than the request timeout (5 seconds); not worth retrying"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Error: 400 for invalid parameters, 401 without the token (AI_OBSERVER_AUTH_TOKEN), 429 after failed tokens, 500"
+          }
+        },
+        "summary": "The API traffic the HTTP capture proxy recorded for a Claude Code session",
+        "tags": [
+          "http-inspector"
         ]
       }
     },

@@ -22,7 +22,8 @@ func (s *Server) startRetention() {
 	s.logDatabaseGrowth(context.Background())
 
 	days, limit := s.config.RetentionDays, s.config.MaxDBSize
-	if days <= 0 && limit <= 0 {
+	captures := s.config.HTTPCaptureRetentionDays() > 0 || (s.config.HTTPProxy.StorageLimit > 0 && s.captureBlobs != nil)
+	if days <= 0 && limit <= 0 && !captures {
 		return
 	}
 
@@ -52,6 +53,9 @@ func (s *Server) startRetention() {
 			}
 			if limit > 0 {
 				s.applySizeLimit(ctx, &guard, time.Now())
+			}
+			if captures {
+				s.applyHTTPCaptureRetention(ctx, time.Now())
 			}
 			select {
 			case <-ctx.Done():

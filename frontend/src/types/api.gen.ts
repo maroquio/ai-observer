@@ -76,8 +76,120 @@ export type ReadyState = 'ok' | 'unavailable'
 /** Type of a metric of AI Observer itself */
 export type InternalMetricType = 'counter' | 'gauge' | 'histogram'
 
-/** What a real-time message announces: stored spans, metric points or log records */
-export type WebSocketMessageType = 'traces' | 'metrics' | 'logs'
+/** What a real-time message announces: stored spans, metric points, log records or HTTP capture exchanges */
+export type WebSocketMessageType =
+  | 'traces'
+  | 'metrics'
+  | 'logs'
+  /**
+   * MessageTypeHTTPExchanges announces HTTP capture exchanges stored or
+   * updated (service "http-proxy")
+   */
+  | 'http_exchanges'
+
+/** How a capture run records: manual (the shared proxy port) or launcher (ai-observer run, a port of its own) */
+export type HTTPCaptureRunMode = 'manual' | 'launcher'
+
+/** State of a capture run */
+export type HTTPCaptureRunState = 'active' | 'finished' | 'interrupted'
+
+/** What the capture stores: safe (redacted bodies), metadata_only (no bodies) or full_raw (also unredacted bodies, local files) */
+export type HTTPCaptureMode =
+  /** CaptureSafe stores bodies with secrets redacted (default) */
+  | 'safe'
+  /**
+   * CaptureMetadataOnly stores no bodies, only metadata (status, timing,
+   * model, usage, sizes, hashes)
+   */
+  | 'metadata_only'
+  /**
+   * CaptureFullRaw also stores the bodies as observed, unredacted, in
+   * local files (explicit opt-in for controlled classroom use)
+   */
+  | 'full_raw'
+
+/** ExchangeKind is what an observed HTTP exchange was, by its endpoint */
+export type HTTPExchangeKind =
+  /** KindModelInference is POST /v1/messages: the model generated a reply */
+  | 'model_inference'
+  /**
+   * KindTokenCount is POST /v1/messages/count_tokens: an estimate of the
+   * input tokens of a request, no generation
+   */
+  | 'token_count'
+  /** KindOtherAPI is any other path that went through the proxy */
+  | 'other_api'
+  /** KindTransportError is an exchange that got no upstream response */
+  | 'transport_error'
+
+/** Exchange states: what the proxy observed of an exchange */
+export type HTTPExchangeState =
+  | 'in_progress'
+  | 'complete'
+  /**
+   * ExchangePartial: the response ended without its normal end (stream
+   * without message_stop, body read error), or the request body was not
+   * read whole
+   */
+  | 'partial'
+  /** ExchangeAborted: the client went away before the response ended */
+  | 'aborted'
+  /** ExchangeFailed: no upstream response (connection, timeout) */
+  | 'failed'
+  /** ExchangeInterrupted: the server stopped before the exchange ended */
+  | 'interrupted'
+
+/** Usage quality of an exchange */
+export type HTTPUsageQuality = 'final' | 'partial' | 'unavailable'
+
+/** Cost estimate status */
+export type HTTPCostStatus = 'complete' | 'partial' | 'unavailable'
+
+/** Body variants an exchange stores (HTTPExchangeBody.Variant) */
+export type HTTPBodyVariant =
+  /** redacted copy */
+  | 'safe'
+  /** as observed, local and sensitive (full_raw) */
+  | 'raw'
+  /** not stored (metadata_only, or nothing observed) */
+  | 'none'
+
+/** Correlation states of a tool use */
+export type HTTPToolLinkStatus = 'matched' | 'pending' | 'unresolved' | 'ambiguous'
+
+/** Body parts and their file names */
+export type HTTPBodyPart = 'request' | 'response'
+
+/** Parse status of a stream event's data (StreamEvent.ParseStatus) */
+export type WireParseStatus =
+  | 'ok'
+  | 'invalid_json'
+  /** no data */
+  | 'empty'
+  /** data cut by the parser's limit */
+  | 'truncated'
+  /** event: field differs from the JSON "type" */
+  | 'mismatch'
+  | 'unexpected'
+
+/** Body decoding status (DecodeBody) */
+export type WireDecodeStatus =
+  /** no content coding: the bytes as they are */
+  | 'identity'
+  /** decoded from the listed codings */
+  | 'decoded'
+  /** a coding this package cannot decode */
+  | 'unsupported'
+  /** corrupt data */
+  | 'error'
+  /** decoded output exceeded the limit */
+  | 'truncated'
+
+/**
+ * Certainty of an observation: what the wire showed, or a conclusion drawn
+ * from it
+ */
+export type WireCertainty = 'observed' | 'inferred'
 
 /** TracesResponse is a page of traces, the most recent first */
 export interface TracesResponse {
@@ -573,6 +685,11 @@ export interface StatusResponse {
   settings: StatusSettings
   pricing: StatusPricing[]
   imports: StatusImport[]
+  /**
+   * httpInspector describes the HTTP capture proxy (enabled false when it
+   * does not run); never credentials
+   */
+  httpInspector: HTTPInspectorStatus
 }
 
 /** StatusServer describes where the server listens */
@@ -712,6 +829,52 @@ export interface StatusImport {
   records: number
   lastImport?: string
   partialFiles: number
+}
+
+/**
+ * HTTPInspectorStatus describes the HTTP capture proxy (GET
+ * /api/http-inspector/status). It never contains credentials.
+ */
+export interface HTTPInspectorStatus {
+  /** Enabled: the proxy runs with this server */
+  enabled: boolean
+  /** host and Port of the shared listener (Port 0: none, launcher runs only) */
+  host: string
+  port: number
+  /**
+   * proxyUrl is the value for ANTHROPIC_BASE_URL (empty without a shared
+   * listener)
+   */
+  proxyUrl?: string
+  upstream: string
+  captureMode: HTTPCaptureMode
+  /** captureDir holds the stored bodies */
+  captureDir?: string
+  maxBodyBytes: number
+  queueSize: number
+  retentionDays: number
+  storageLimit: number
+  /** manualRunId is the run of the shared listener */
+  manualRunId?: string
+  activeRuns: number
+  /** Counters since the server started */
+  exchanges: number
+  inFlight: number
+  bytesForwarded: number
+  bytesStored: number
+  sseEvents: number
+  /**
+   * droppedRecords are capture records lost because the queue was full;
+   * LostBodyBytes body bytes not captured because the capture buffer was
+   * full; StoreErrors failed writes. Traffic continued in all cases.
+   */
+  droppedRecords: number
+  lostBodyBytes: number
+  storeErrors: number
+  parseErrors: number
+  /** Degraded: some capture was lost since the start */
+  degraded: boolean
+  warnings: string[]
 }
 
 /** DashboardsResponse lists the dashboards (without widgets) */
@@ -925,6 +1088,838 @@ export interface AdminExportResponse {
   dashboards: number
   sizeBytes: number
   durationMs: number
+}
+
+/** HTTPCaptureRunsResponse is a page of capture runs, newest first */
+export interface HTTPCaptureRunsResponse {
+  runs: HTTPCaptureRun[]
+  total: number
+  hasMore: boolean
+  nextCursor?: string
+}
+
+/**
+ * HTTPCaptureRun is a capture run: the exchanges of one launched process,
+ * or of the shared manual port during one server start
+ */
+export interface HTTPCaptureRun {
+  id: string
+  name: string
+  note?: string
+  mode: HTTPCaptureRunMode
+  state: HTTPCaptureRunState
+  captureMode: HTTPCaptureMode
+  port: number
+  upstream: string
+  /** Cwd, Command and PID of a launched process */
+  cwd?: string
+  command?: string
+  pid?: number
+  exitCode?: number
+  startedAt: string
+  endedAt?: string
+  /** exchanges observed, and the last one's time */
+  exchanges: number
+  lastExchangeAt?: string
+  /**
+   * sessionIds are the Claude Code session IDs the exchanges carried
+   * (X-Claude-Code-Session-Id or metadata.user_id)
+   */
+  sessionIds: string[]
+  /** unattributed counts exchanges without a session ID */
+  unattributed: number
+  /** storedBytes of the run's bodies */
+  storedBytes: number
+}
+
+/** HTTPRunDetail is a run with its summary */
+export interface HTTPRunDetail {
+  run: HTTPCaptureRun
+  summary: HTTPTrafficSummary
+}
+
+/** HTTPTrafficSummary aggregates exchanges (a run, or a session) */
+export interface HTTPTrafficSummary {
+  exchanges: number
+  inference: number
+  tokenCounts: number
+  other: number
+  errors: number
+  retries: number
+  partial: number
+  inProgress: number
+  streams: number
+  /**
+   * tokens of inference exchanges with final usage; PartialTokens of
+   * those with partial usage, kept apart
+   */
+  tokens: HTTPTokenTotals
+  partialTokens: HTTPTokenTotals
+  /** countedTokens sums count_tokens results (estimates, not usage) */
+  countedTokens: number
+  /**
+   * costUsd is the estimated API-equivalent cost of the priced exchanges;
+   * CostStatus is partial when some were not priced
+   */
+  costUsd: number
+  costStatus: HTTPCostStatus
+  /** durationMs from the first request to the last response */
+  durationMs: number
+  firstAt?: string
+  lastAt?: string
+  models: string[]
+  degraded: number
+}
+
+/**
+ * HTTPTokenTotals are summed usage fields; CacheReadShare is cache reads
+ * over total input tokens
+ */
+export interface HTTPTokenTotals {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  cacheWrite5m: number
+  cacheWrite1h: number
+  cacheWriteOther: number
+  totalInput: number
+  totalProcessed: number
+  cacheReadShare?: number
+  /** exchanges counted */
+  exchanges: number
+}
+
+/**
+ * CreateHTTPCaptureRunRequest starts a launcher run (ai-observer run): the
+ * server opens a proxy port for it alone
+ */
+export interface CreateHTTPCaptureRunRequest {
+  name?: string
+  cwd?: string
+  command?: string
+}
+
+/** HTTPCaptureRunCreated is the started run and its proxy URL */
+export interface HTTPCaptureRunCreated {
+  run: HTTPCaptureRun
+  proxyUrl: string
+}
+
+/**
+ * UpdateHTTPCaptureRunRequest renames a run or sets its note; omitted
+ * fields stay
+ */
+export interface UpdateHTTPCaptureRunRequest {
+  name?: string
+  note?: string
+}
+
+/** FinishHTTPCaptureRunRequest ends a launcher run */
+export interface FinishHTTPCaptureRunRequest {
+  exitCode?: number
+  pid?: number
+}
+
+/** HTTPExchangesResponse is a page of exchanges in run order */
+export interface HTTPExchangesResponse {
+  exchanges: HTTPExchange[]
+  total: number
+  hasMore: boolean
+  nextCursor?: string
+}
+
+/** HTTPExchange is a row of the timeline: one request and its response */
+export interface HTTPExchange {
+  id: string
+  runId: string
+  /** seq is the exchange's position in its run (1-based, by arrival) */
+  seq: number
+  /** sessionId and the evidence it came from (header or body field) */
+  sessionId?: string
+  sessionEvidence?: string
+  /** requestId is the upstream's request-id response header */
+  requestId?: string
+  method: string
+  path: string
+  query?: string
+  /** Kind: model_inference, token_count, other_api, transport_error */
+  kind: HTTPExchangeKind
+  state: HTTPExchangeState
+  /** status is the HTTP status the client received (0: none) */
+  status: number
+  requestedModel?: string
+  responseModel?: string
+  stream: boolean
+  stopReason?: string
+  messageId?: string
+  /** retryCount is the client's X-Stainless-Retry-Count header */
+  retryCount: number
+  startedAt: string
+  /** Durations from the start in milliseconds (nil: not reached) */
+  durationMs?: number
+  ttfbMs?: number
+  firstEventMs?: number
+  /** Body sizes as observed on the wire */
+  requestBytes: number
+  responseBytes: number
+  sseEvents: number
+  /** headline is a one-sentence, evidence-based description */
+  headline: string
+  /**
+   * toolUses names the tools the reply requested; ToolResults counts
+   * tool results the request carried for the first time
+   */
+  toolUses: string[]
+  toolResults: number
+  errorType?: string
+  error?: string
+  /**
+   * Degraded: part of this exchange was not captured (traffic was not
+   * affected)
+   */
+  degraded: boolean
+  captureMode: HTTPCaptureMode
+  usage?: HTTPUsage
+}
+
+/**
+ * HTTPUsage is the token usage of an exchange: the API's usage object,
+ * normalized (nil: not reported, never 0), with derived totals and the
+ * estimated API-equivalent cost
+ */
+export interface HTTPUsage {
+  usage: WireUsage
+  totals: WireUsageTotals
+  /**
+   * Quality: final (complete response), partial (interrupted: the last
+   * cumulative values observed), unavailable (no usage)
+   */
+  quality: HTTPUsageQuality
+  /**
+   * countTokens is the input_tokens of a count_tokens response: an
+   * estimate, not inference usage
+   */
+  countTokens?: number
+  /**
+   * costUsd is the API-equivalent cost estimated from the price catalog
+   * (not a subscription charge); nil when not estimable
+   */
+  costUsd?: number
+  costStatus: HTTPCostStatus
+  costReason?: string
+  /** pricedModel is the catalog model the cost used */
+  pricedModel?: string
+  /** source is always http_proxy: captured on the wire */
+  source: string
+}
+
+/**
+ * WireUsage is a usage object of the Messages API, normalized. A nil field was
+ * not reported: never treat it as 0.
+ */
+export interface WireUsage {
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
+  /**
+   * cacheCreation5m and CacheCreation1h are usage.cache_creation.
+   * ephemeral_5m_input_tokens / ephemeral_1h_input_tokens: parts of
+   * CacheCreationInputTokens, never added to it again
+   */
+  cacheCreation5m?: number
+  cacheCreation1h?: number
+  /** serviceTier is usage.service_tier, when present */
+  serviceTier?: string
+  /**
+   * raw is the usage object as received (for a stream, the last one
+   * observed, see Message.UsageSnapshots)
+   */
+  raw?: unknown
+}
+
+/**
+ * WireUsageTotals are the totals derived from a Usage by the documented rules:
+ *
+ * 	total_input     = input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+ * 	total_processed = total_input + output_tokens
+ * 	cache_read_share = cache_read_input_tokens / total_input (total_input > 0)
+ *
+ * A total is nil when its first term (input_tokens, resp. total_input and
+ * output_tokens) is nil; absent cache fields are not counted, and Complete
+ * tells whether all three input fields were reported.
+ */
+export interface WireUsageTotals {
+  totalInput?: number
+  totalProcessed?: number
+  cacheReadShare?: number
+  /**
+   * cacheWriteUnknown is cache_creation_input_tokens minus the 5m and 1h
+   * parts, when all three are known and it is above 0: cache writes whose
+   * duration the API did not report. When neither part was reported it
+   * is all of cache_creation_input_tokens (if above 0).
+   */
+  cacheWriteUnknown?: number
+  complete: boolean
+}
+
+/** HTTPToolLinksResponse lists a run's tool uses in order */
+export interface HTTPToolLinksResponse {
+  tools: HTTPToolLink[]
+  /** note reminds that local execution is not observed */
+  note: string
+}
+
+/**
+ * HTTPToolLink is a tool use requested by a reply and the request that
+ * carried its result
+ */
+export interface HTTPToolLink {
+  toolUseId: string
+  name?: string
+  sessionId?: string
+  /** useExchangeId is the exchange whose reply requested the tool */
+  useExchangeId?: string
+  useSeq?: number
+  /** input is the tool's arguments (redacted; empty in metadata_only) */
+  input?: string
+  /**
+   * resultExchangeId is the first exchange whose request carried the
+   * tool_result with this ID
+   */
+  resultExchangeId?: string
+  resultSeq?: number
+  resultIsError: boolean
+  resultPreview?: string
+  resultBytes: number
+  /** Status: matched, pending, unresolved, ambiguous */
+  status: HTTPToolLinkStatus
+  /** evidence names how the link was made */
+  evidence: string
+}
+
+/**
+ * HTTPExchangeDetail is an exchange with its transport lifecycle and
+ * interpretation (GET /api/http-inspector/exchanges/{id})
+ */
+export interface HTTPExchangeDetail {
+  exchange: HTTPExchange
+  lifecycle: HTTPLifecycleEvent[]
+  observations: WireObservation[]
+  /** degradedReasons explain what was not captured */
+  degradedReasons: string[]
+  /** Previous and next exchange of the run, for navigation */
+  prevId?: string
+  nextId?: string
+  /** run is the exchange's run */
+  run: HTTPCaptureRun
+}
+
+/** HTTPLifecycleEvent is a transport event of an exchange */
+export interface HTTPLifecycleEvent {
+  /**
+   * Event: request_started, request_body_observed, upstream_connected,
+   * response_headers_received, response_streaming, completed,
+   * upstream_error, client_aborted, upstream_aborted, capture_degraded,
+   * stream_parse_error
+   */
+  event: string
+  at: string
+  detail?: string
+}
+
+/**
+ * WireObservation is one evidence-based statement about an exchange, for the
+ * didactic view. Text is Brazilian Portuguese; it states what the wire
+ * showed, never what the model "thought" or what the client did locally.
+ */
+export interface WireObservation {
+  /**
+   * code is a stable identifier: assistant_text, tool_use,
+   * assistant_thinking_available, server_tool_event, stop_reason,
+   * api_error, tool_result_submitted, context_change, cache_breakpoint,
+   * tool_definitions_provided, token_count, other_api, transport_error,
+   * stream_partial, possible_compaction, unknown
+   */
+  code: string
+  /** side is "request", "response" or "transport" */
+  side: string
+  certainty: WireCertainty
+  text: string
+  /**
+   * evidence names the fields the statement is based on, such as
+   * "response.content[1].type=tool_use"
+   */
+  evidence: string
+}
+
+/** HTTPExchangeBody is one side of an exchange: headers and body */
+export interface HTTPExchangeBody {
+  exchangeId: string
+  /** part is request or response */
+  part: HTTPBodyPart
+  headers: HTTPHeader[]
+  /**
+   * variant of the body returned: safe (redacted), raw (as observed,
+   * full_raw only) or none
+   */
+  variant: HTTPBodyVariant
+  /** available lists the stored variants */
+  available: string[]
+  /**
+   * contentType and ContentEncoding headers; DecodeStatus says how the
+   * body was decoded for display (identity, decoded, unsupported, error)
+   */
+  contentType?: string
+  contentEncoding?: string
+  decodeStatus?: WireDecodeStatus
+  /**
+   * observedBytes and ObservedSHA256 describe the bytes on the wire
+   * (encoded); the SHA-256 is empty when bytes were lost
+   */
+  observedBytes: number
+  observedSha256?: string
+  /** storedBytes and StoredSHA256 describe the returned variant (decoded) */
+  storedBytes: number
+  storedSha256?: string
+  /**
+   * Truncated: the body exceeded the storage limit; only its start is
+   * stored (the traffic was forwarded whole)
+   */
+  truncated: boolean
+  /** Sanitized: redaction changed the stored safe variant */
+  sanitized: boolean
+  /** redactions counts the replaced values */
+  redactions: number
+  /** bodyEncoding is utf8 or base64 (bytes that are no valid UTF-8) */
+  bodyEncoding?: string
+  body?: string
+  /** request is the interpreted request (part request, Messages API) */
+  request?: WireRequestSummary
+  /** message is the interpreted reply (part response, Messages API) */
+  message?: WireMessage
+  /** unavailable explains a missing body (metadata_only, not captured) */
+  unavailable?: string
+}
+
+/** HTTPHeader is a header as stored: secret values are never stored */
+export interface HTTPHeader {
+  name: string
+  value: string
+  /** Redacted: the value was replaced (credentials, cookies) */
+  redacted: boolean
+}
+
+/**
+ * WireRequestSummary is what ParseRequest reads from a Messages API request
+ * body (also count_tokens requests, which share the shape)
+ */
+export interface WireRequestSummary {
+  /** valid is false when the body is not a JSON object; ParseError says why */
+  valid: boolean
+  parseError?: string
+  model?: string
+  maxTokens?: number
+  temperature?: number
+  topP?: number
+  topK?: number
+  stream?: boolean
+  /** Raw JSON of fields shown as they are */
+  thinking?: unknown
+  outputConfig?: unknown
+  toolChoice?: unknown
+  metadata?: unknown
+  contextManagement?: unknown
+  stopSequences?: unknown
+  system: WireSystemSummary
+  tools: WireToolsSummary
+  messages: WireMessagesSummary
+  toolResults: WireToolResultRef[] | null
+  /** toolUses are the tool_use blocks in the request's history */
+  toolUses: WireToolUseRef[] | null
+  cacheBreakpoints: WireCacheBreakpoint[] | null
+  /**
+   * sessionId is the session_id in metadata.user_id (a JSON string with
+   * "session_id", or the legacy "..._session_<id>" form); empty otherwise
+   */
+  sessionId?: string
+  /**
+   * unknownFields are the top-level keys not in KnownRequestFields, in
+   * order of appearance
+   */
+  unknownFields: string[] | null
+}
+
+/** WireSystemSummary describes the system field of a request */
+export interface WireSystemSummary {
+  present: boolean
+  /** kind is "string" or "blocks" */
+  kind?: string
+  blocks: number
+  /** bytes of the system field's JSON, SHA256 of those bytes (hex) */
+  bytes: number
+  sha256?: string
+}
+
+/** WireToolsSummary describes the tools array of a request */
+export interface WireToolsSummary {
+  count: number
+  deferred: number
+  bytes: number
+  sha256?: string
+  tools: WireToolDef[] | null
+}
+
+/** WireToolDef is one entry of a request's tools array */
+export interface WireToolDef {
+  name: string
+  /** type is set for server/versioned tools (e.g. web_search_20250305) */
+  type?: string
+  deferLoading?: boolean
+  bytes: number
+  sha256: string
+}
+
+/** WireMessagesSummary describes the messages array of a request */
+export interface WireMessagesSummary {
+  count: number
+  /**
+   * roles counts messages by role; Blocks counts content blocks by type
+   * (a string content counts as one "text" block)
+   */
+  roles: Record<string, number> | null
+  blocks: Record<string, number> | null
+  bytes: number
+  /**
+   * hashes are the SHA-256 (hex, first 16 characters) of each message's
+   * JSON bytes as sent, in order, for prefix comparison (DiffRequests)
+   */
+  hashes: string[] | null
+  /** sizes are the JSON bytes of each message */
+  sizes: number[] | null
+}
+
+/** WireToolResultRef is a tool_result block of a request */
+export interface WireToolResultRef {
+  toolUseId: string
+  isError: boolean
+  messageIndex: number
+  blockIndex: number
+  /** contentBytes is the size of the block's content JSON */
+  contentBytes: number
+  /**
+   * preview is the start of the result's text (at most 300 bytes, cut at
+   * a UTF-8 boundary); callers sanitize it before storing
+   */
+  preview?: string
+}
+
+/** WireToolUseRef is a tool_use block found in a request's history or a reply */
+export interface WireToolUseRef {
+  id: string
+  name: string
+  input?: unknown
+  messageIndex: number
+  blockIndex: number
+}
+
+/** WireCacheBreakpoint is a cache_control marker in a request */
+export interface WireCacheBreakpoint {
+  /** location such as "system[1]", "tools[12]", "messages[4].content[0]" */
+  location: string
+  /** ttl is cache_control.ttl ("5m", "1h"), empty when not given */
+  ttl?: string
+  type?: string
+}
+
+/**
+ * WireMessage is a reply of POST /v1/messages: parsed from a JSON body, or
+ * reconstructed from its SSE events
+ */
+export interface WireMessage {
+  id?: string
+  type?: string
+  role?: string
+  model?: string
+  content: WireContentBlock[] | null
+  stopReason?: string
+  stopSequence?: string
+  usage: WireUsage
+  /**
+   * usageSnapshots are the usage objects of a stream in order (cumulative:
+   * the last one is the reference, they are never added up)
+   */
+  usageSnapshots?: WireUsageSnapshot[]
+  /** error is an error object (JSON error body, or SSE error event) */
+  error?: WireAPIError
+  /** streamed tells whether the message came from SSE events */
+  streamed: boolean
+  /** SawMessageStart, SawMessageStop: stream framing observed */
+  sawMessageStart: boolean
+  sawMessageStop: boolean
+  /**
+   * Complete: a JSON message was parsed whole, or a stream reached
+   * message_stop with every started block stopped. An interrupted stream
+   * is never complete, even when it has content.
+   */
+  complete: boolean
+  /** eventCounts counts the stream's events by type */
+  eventCounts?: Record<string, number>
+  /** notes are parse problems (invalid JSON, unexpected order, ...) */
+  notes?: string[]
+  /** extra holds top-level fields this type does not know */
+  extra?: Record<string, unknown>
+}
+
+/**
+ * WireContentBlock is a content block of a message, as received or
+ * reconstructed from content_block_* events
+ */
+export interface WireContentBlock {
+  index: number
+  type: string
+  /** text of text blocks */
+  text?: string
+  /**
+   * thinking and Signature of thinking blocks; Data of redacted_thinking
+   * blocks (opaque, never interpreted)
+   */
+  thinking?: string
+  signature?: string
+  data?: string
+  /**
+   * ID, Name, Input of tool_use, server_tool_use and mcp_tool_use blocks.
+   * In a stream Input is set only when the concatenated input_json_delta
+   * fragments (PartialInput) form valid JSON; InputError says why not.
+   */
+  id?: string
+  name?: string
+  input?: unknown
+  partialInput?: string
+  inputComplete?: boolean
+  inputError?: string
+  /** toolUseId of result blocks such as web_search_tool_result */
+  toolUseId?: string
+  /**
+   * stopped is set when content_block_stop was received (streams), or for
+   * blocks of a complete JSON message
+   */
+  stopped: boolean
+  /**
+   * raw is the block as received (content_block_start's block, or the
+   * block of a JSON message), with fields this type does not know
+   */
+  raw?: unknown
+}
+
+/** WireUsageSnapshot is a usage object observed in a stream, in order */
+export interface WireUsageSnapshot {
+  /** eventSeq is the SSE event the usage came from */
+  eventSeq: number
+  /**
+   * eventType is message_start or message_delta (or another type that
+   * carried usage)
+   */
+  eventType: string
+  /** usage is the cumulative usage after this event (merged snapshot) */
+  usage: WireUsage
+}
+
+/**
+ * WireAPIError is an error object of the API: {"type":"error","error":{...}}
+ * as a JSON body or as an SSE error event
+ */
+export interface WireAPIError {
+  type: string
+  message: string
+  raw?: unknown
+}
+
+/** HTTPSSEEventsResponse is a page of an exchange's SSE events in order */
+export interface HTTPSSEEventsResponse {
+  events: HTTPSSEEvent[]
+  total: number
+  hasMore: boolean
+  nextCursor?: string
+  /** types counts all events of the exchange by type */
+  types: Record<string, number>
+}
+
+/** HTTPSSEEvent is one Server-Sent Event of a streamed response */
+export interface HTTPSSEEvent {
+  seq: number
+  /** offsetMs is the time since the request started */
+  offsetMs: number
+  byteOffset: number
+  byteLen: number
+  /** event is the event: field; Type the JSON "type" */
+  event?: string
+  type: string
+  index?: number
+  deltaType?: string
+  parseStatus: WireParseStatus
+  note?: string
+  /**
+   * data is the event's data (redacted in safe mode, empty in
+   * metadata_only)
+   */
+  data?: string
+  dataBytes: number
+  truncated: boolean
+}
+
+/** HTTPUsageDetail is the usage of one exchange with its stream snapshots */
+export interface HTTPUsageDetail extends HTTPUsage {
+  exchangeId: string
+  kind: HTTPExchangeKind
+  model?: string
+  /** snapshots are the usage objects of the stream in order (cumulative) */
+  snapshots: WireUsageSnapshot[]
+  /** costComponents itemize the estimated cost */
+  costComponents: HTTPCostComponent[]
+}
+
+/** HTTPCostComponent is one priced part of an exchange's usage */
+export interface HTTPCostComponent {
+  /**
+   * Component: input, output, cache_read, cache_write_5m, cache_write_1h,
+   * cache_write_unknown
+   */
+  component: string
+  tokens: number
+  /** pricePerMTok is the catalog price per million tokens; nil: no price */
+  pricePerMTok?: number
+  costUsd?: number
+  note?: string
+}
+
+/**
+ * HTTPRequestDiffResponse compares a request with an earlier one of the
+ * same session and kind
+ */
+export interface HTTPRequestDiffResponse {
+  exchangeId: string
+  /** previousId is the compared exchange (empty: none, everything is new) */
+  previousId?: string
+  previousSeq?: number
+  /**
+   * comparedBy says how the previous exchange was chosen:
+   * same_conversation (equal first message), same_model,
+   * previous_in_session, none
+   */
+  comparedBy: string
+  diff: WireRequestDiff
+}
+
+/**
+ * WireRequestDiff compares a request with an earlier one (DiffRequests). It
+ * works on the summaries' fingerprints, never on the bodies, so its cost
+ * does not grow with the size of the conversation.
+ */
+export interface WireRequestDiff {
+  modelBefore?: string
+  modelAfter?: string
+  modelChanged: boolean
+  paramChanges: WireFieldChange[] | null
+  systemChanged: boolean
+  systemSha256After?: string
+  systemBytesBefore: number
+  systemBytesAfter: number
+  toolsChanged: boolean
+  toolsBytesBefore: number
+  toolsBytesAfter: number
+  toolsAdded: string[] | null
+  toolsRemoved: string[] | null
+  toolsModified: string[] | null
+  toolsCountBefore: number
+  toolsCountAfter: number
+  messagesBefore: number
+  messagesAfter: number
+  /** commonPrefix is the number of leading messages with equal hashes */
+  commonPrefix: number
+  /**
+   * messagesAdded are the messages after the common prefix in the later
+   * request; MessagesReplaced the earlier request's messages after it
+   * (history rewritten, e.g. by compaction)
+   */
+  messagesAdded: number
+  messagesReplaced: number
+  /**
+   * newBytes are the JSON bytes of the added messages, RepeatedBytes those
+   * of the common prefix (history sent again)
+   */
+  newBytes: number
+  repeatedBytes: number
+  /**
+   * newToolResults are tool_use IDs of tool_result blocks that the earlier
+   * request did not carry
+   */
+  newToolResults: string[] | null
+  cacheBreakpointsBefore: WireCacheBreakpoint[] | null
+  cacheBreakpointsAfter: WireCacheBreakpoint[] | null
+  cacheChanged: boolean
+  /**
+   * PossibleCompaction: the history was rewritten (common prefix shorter
+   * than the earlier request) and the message count dropped. A hint, not
+   * a certainty.
+   */
+  possibleCompaction: boolean
+}
+
+/**
+ * WireFieldChange is a request parameter that differs between two requests
+ * (JSON values; empty when absent)
+ */
+export interface WireFieldChange {
+  field: string
+  before?: string
+  after?: string
+}
+
+/**
+ * HTTPSessionTrafficResponse is the API traffic of a Claude Code session
+ * (GET /api/sessions/{sessionId}/http-exchanges)
+ */
+export interface HTTPSessionTrafficResponse extends HTTPExchangesResponse {
+  sessionId: string
+  summary: HTTPTrafficSummary
+  /** runs that carried the session's exchanges */
+  runs: HTTPCaptureRun[]
+  comparison?: HTTPSourceComparison
+}
+
+/**
+ * HTTPSourceComparison sets the proxy's usage of a session beside what
+ * OTLP and session files recorded, without adding them up
+ */
+export interface HTTPSourceComparison {
+  /**
+   * selected is the source of the session totals shown elsewhere in AI
+   * Observer (otlp/local_jsonl, unchanged by the proxy)
+   */
+  selected: string
+  /**
+   * Telemetry usage of the session (OTLP or session file, deduplicated
+   * by AI Observer's existing rules); nil when unknown
+   */
+  telemetryInputTokens?: number
+  telemetryOutputTokens?: number
+  telemetryCostUsd?: number
+  /**
+   * proxyInputTokens / ProxyOutputTokens: the proxy's final usage
+   * (input = uncached + cache read + cache write)
+   */
+  proxyInputTokens: number
+  proxyOutputTokens: number
+  /**
+   * MatchedRequests: exchanges whose request-id also appears in the
+   * session's telemetry (same model request seen by both)
+   */
+  matchedRequests: number
+  /** Certainty: exact (every inference exchange matched), partial, none */
+  certainty: string
+  note: string
 }
 
 /**

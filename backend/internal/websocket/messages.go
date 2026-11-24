@@ -12,6 +12,9 @@ const (
 	MessageTypeTraces  MessageType = "traces"
 	MessageTypeMetrics MessageType = "metrics"
 	MessageTypeLogs    MessageType = "logs"
+	// MessageTypeHTTPExchanges announces HTTP capture exchanges stored or
+	// updated (service "http-proxy")
+	MessageTypeHTTPExchanges MessageType = "http_exchanges"
 )
 
 type Message struct {
@@ -87,4 +90,19 @@ func MetricsStored(metrics []api.MetricDataPoint) Message {
 	return NewMetricsMessage(newNotification(len(metrics), func(i int) (string, time.Time) {
 		return metrics[i].ServiceName, metrics[i].Timestamp
 	}))
+}
+
+// HTTPCaptureService is the service name of HTTP capture notifications
+const HTTPCaptureService = "http-proxy"
+
+// HTTPExchangesStored announces stored or updated HTTP capture exchanges,
+// with the start time of each
+func HTTPExchangesStored(timestamps []time.Time) Message {
+	return Message{
+		Type:      MessageTypeHTTPExchanges,
+		Timestamp: time.Now(),
+		Payload: newNotification(len(timestamps), func(i int) (string, time.Time) {
+			return HTTPCaptureService, timestamps[i]
+		}),
+	}
 }

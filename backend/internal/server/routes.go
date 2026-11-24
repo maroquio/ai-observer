@@ -45,6 +45,10 @@ func (s *Server) setupRoutes(h *handlers.Handlers) error {
 		// Sessions
 		r.Get("/sessions", h.QuerySessions)
 		r.Get("/sessions/{sessionId}/transcript", h.GetSessionTranscript)
+		r.Get("/sessions/{sessionId}/http-exchanges", s.httpInspector.SessionExchanges)
+
+		// HTTP Inspector: the HTTP capture proxy's runs and exchanges
+		r.Route("/http-inspector", s.httpInspectorRoutes)
 
 		// Services
 		r.Get("/services", h.ListServices)
@@ -106,4 +110,26 @@ func (s *Server) setupRoutes(h *handlers.Handlers) error {
 	}
 
 	return nil
+}
+
+// httpInspectorRoutes are the HTTP Inspector's endpoints, served whether or
+// not the proxy runs (stored captures stay readable)
+func (s *Server) httpInspectorRoutes(r chi.Router) {
+	hi := s.httpInspector
+	r.Get("/status", hi.GetStatus)
+	r.Get("/runs", hi.ListRuns)
+	r.Post("/runs", hi.CreateRun)
+	r.Get("/runs/{runId}", hi.GetRun)
+	r.Put("/runs/{runId}", hi.UpdateRun)
+	r.Delete("/runs/{runId}", hi.DeleteRun)
+	r.Post("/runs/{runId}/finish", hi.FinishRun)
+	r.Get("/runs/{runId}/exchanges", hi.RunExchanges)
+	r.Get("/runs/{runId}/tools", hi.RunTools)
+	r.Get("/runs/{runId}/export", hi.ExportRun)
+	r.Get("/exchanges/{exchangeId}", hi.GetExchange)
+	r.Get("/exchanges/{exchangeId}/request", hi.GetRequest)
+	r.Get("/exchanges/{exchangeId}/response", hi.GetResponse)
+	r.Get("/exchanges/{exchangeId}/events", hi.GetEvents)
+	r.Get("/exchanges/{exchangeId}/usage", hi.GetUsage)
+	r.Get("/exchanges/{exchangeId}/diff", hi.GetDiff)
 }
