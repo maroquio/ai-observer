@@ -228,6 +228,9 @@ func (s *DuckDBStore) SearchSessionsPage(ctx context.Context, terms []string, se
 	if err := s.fillSpanSessionExtents(ctx, resp.Sessions); err != nil {
 		return nil, err
 	}
+	if err := s.fillSessionHTTPExchanges(ctx, resp.Sessions); err != nil {
+		return nil, err
+	}
 	return resp, nil
 }
 

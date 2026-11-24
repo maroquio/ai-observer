@@ -886,3 +886,43 @@ func (s *DuckDBStore) HTTPCaptureCounts(ctx context.Context) (runs, exchanges in
 	err = s.db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM http_capture_runs), (SELECT count(*) FROM http_capture_exchanges)`).Scan(&runs, &exchanges)
 	return runs, exchanges, err
 }
+
+// fillSessionHTTPExchanges sets the number of captured API exchanges of
+// listed sessions (the HTTP Inspector's, kept apart from their telemetry)
+func (s *DuckDBStore) fillSessionHTTPExchanges(ctx context.Context, sessions []api.Session) error {
+	if len(sessions) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(sessions))
+	var marks []string
+	var args []any
+	for _, session := range sessions {
+		if !seen[session.SessionID] {
+			seen[session.SessionID] = true
+			marks = append(marks, "?")
+			args = append(args, session.SessionID)
+		}
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT session_id, COUNT(*) FROM http_capture_exchanges
+		WHERE session_id IN (`+strings.Join(marks, ", ")+`) GROUP BY session_id`, args...)
+	if err != nil {
+		return fmt.Errorf("counting sessions' captured exchanges: %w", err)
+	}
+	defer rows.Close()
+	counts := make(map[string]int, len(marks))
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return fmt.Errorf("scanning captured exchange count: %w", err)
+		}
+		counts[id] = n
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range sessions {
+		sessions[i].HTTPExchanges = counts[sessions[i].SessionID]
+	}
+	return nil
+}

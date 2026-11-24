@@ -336,6 +336,11 @@ func TestHTTPInspectorEndToEnd(t *testing.T) {
 		t.Fatalf("session traffic %+v", session.Comparison)
 	}
 	c.get("/api/sessions/unknown/http-exchanges", "HTTPSessionTrafficResponse")
+	// The session list counts the session's captured exchanges
+	listed := decode[api.SessionsResponse](t, c.get("/api/sessions?service=claude-code", "SessionsResponse"))
+	if len(listed.Sessions) != 1 || listed.Sessions[0].SessionID != e2eSession || listed.Sessions[0].HTTPExchanges != 4 {
+		t.Fatalf("sessions %+v", listed.Sessions)
+	}
 	statsAfter := decode[api.StatsResponse](t, c.get(statsURL, "StatsResponse"))
 	if statsAfter.SpanCount != statsBefore.SpanCount || statsAfter.MetricCount != statsBefore.MetricCount || statsAfter.LogCount != statsBefore.LogCount+1 {
 		t.Fatalf("telemetry counts changed by the capture: %+v -> %+v", statsBefore, statsAfter)

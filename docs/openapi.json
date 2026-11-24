@@ -2553,6 +2553,11 @@
             "format": "double",
             "type": "number"
           },
+          "httpExchanges": {
+            "description": "HTTPExchanges counts the session's Anthropic API exchanges captured by\nthe HTTP Inspector's proxy (0: none captured)",
+            "format": "int64",
+            "type": "integer"
+          },
           "inputTokens": {
             "format": "int64",
             "type": "integer"

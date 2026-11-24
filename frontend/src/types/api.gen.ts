@@ -514,6 +514,11 @@ export interface Session {
   inputTokens?: number
   outputTokens?: number
   /**
+   * httpExchanges counts the session's Anthropic API exchanges captured by
+   * the HTTP Inspector's proxy (0: none captured)
+   */
+  httpExchanges?: number
+  /**
    * Search results only: the text around the terms in the newest matching
    * record (redacted), the number of matching records in the range, and
    * the time of the newest

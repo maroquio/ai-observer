@@ -437,6 +437,9 @@ type Session struct {
 	CostUSD      *float64 `json:"costUsd,omitempty"`
 	InputTokens  *int64   `json:"inputTokens,omitempty"`
 	OutputTokens *int64   `json:"outputTokens,omitempty"`
+	// HTTPExchanges counts the session's Anthropic API exchanges captured by
+	// the HTTP Inspector's proxy (0: none captured)
+	HTTPExchanges int `json:"httpExchanges,omitempty"`
 	// Search results only: the text around the terms in the newest matching
 	// record (redacted), the number of matching records in the range, and
 	// the time of the newest

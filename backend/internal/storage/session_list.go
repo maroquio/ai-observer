@@ -106,6 +106,9 @@ func (s *DuckDBStore) QuerySessions(ctx context.Context, service string, from, t
 	if err := s.fillSessionExtents(ctx, resp.Sessions); err != nil {
 		return nil, err
 	}
+	if err := s.fillSessionHTTPExchanges(ctx, resp.Sessions); err != nil {
+		return nil, err
+	}
 	return resp, nil
 }
 
