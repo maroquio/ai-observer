@@ -139,7 +139,7 @@ func (s *RequestSummary) readMessages(raw []byte) {
 	}
 	s.Messages.Bytes = len(raw)
 	forEachElem(raw, func(i int, msg []byte) {
-		sum := sha256.Sum256(msg)
+		sum := sha256.Sum256(withoutCacheControl(msg))
 		s.Messages.Hashes = append(s.Messages.Hashes, hex.EncodeToString(sum[:8]))
 		s.Messages.Sizes = append(s.Messages.Sizes, len(msg))
 		role := ""

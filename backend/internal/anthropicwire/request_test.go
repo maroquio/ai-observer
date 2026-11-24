@@ -69,7 +69,8 @@ func TestParseRequestFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, raw := range rawMsgs {
-		sum := sha256.Sum256(raw)
+		// The bytes as sent, without the cache breakpoints (which move)
+		sum := sha256.Sum256(withoutCacheControl(raw))
 		if msgs.Hashes[i] != hex.EncodeToString(sum[:])[:16] || msgs.Sizes[i] != len(raw) {
 			t.Errorf("message %d fingerprint differs from its bytes as sent", i)
 		}
@@ -235,8 +236,9 @@ func checkWalk(t *testing.T, data []byte) {
 	if !json.Valid(data) {
 		return
 	}
+	// null unmarshals into a nil map or slice: it is a scalar
 	var obj map[string]json.RawMessage
-	if json.Unmarshal(data, &obj) == nil {
+	if json.Unmarshal(data, &obj) == nil && obj != nil {
 		got := map[string]json.RawMessage{}
 		if !forEachMember(data, func(k string, v []byte) { got[k] = v }) {
 			t.Fatalf("%q: forEachMember failed", data)
@@ -252,7 +254,7 @@ func checkWalk(t *testing.T, data []byte) {
 		return
 	}
 	var arr []json.RawMessage
-	if json.Unmarshal(data, &arr) == nil {
+	if json.Unmarshal(data, &arr) == nil && arr != nil {
 		var got []json.RawMessage
 		if !forEachElem(data, func(_ int, v []byte) { got = append(got, v) }) {
 			t.Fatalf("%q: forEachElem failed", data)

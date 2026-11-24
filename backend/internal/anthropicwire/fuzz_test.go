@@ -133,8 +133,12 @@ func FuzzJSONWalk(f *testing.F) {
 	}
 	f.Add([]byte(`{"a\\":"\\\"","b":[{"c":"}]"}]}`))
 	f.Add([]byte(` "0"`))
+	f.Add([]byte(`[{"cache_control":{"type":"ephemeral"}, "a":"\"cache_control\":1"},{"b":1 ,"cache_control" : {}}]`))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		checkWalk(t, data)
+		if json.Valid(data) && !json.Valid(withoutCacheControl(data)) {
+			t.Fatalf("withoutCacheControl(%q) = %q, invalid JSON", data, withoutCacheControl(data))
+		}
 		if json.Valid(data) {
 			var s string
 			if json.Unmarshal(data, &s) == nil && stringPrefix(data, 1<<20) != s {

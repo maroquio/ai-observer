@@ -240,3 +240,54 @@ func rawBool(raw json.RawMessage) *bool {
 	}
 	return nil
 }
+
+var cacheControlKey = []byte(`"cache_control"`)
+
+// withoutCacheControl returns the JSON value raw without its
+// "cache_control" members, at any depth, leaving every other byte as it
+// is; raw itself when it has none. A key is recognized by what surrounds
+// it ('{' or ',' before, ':' after), which a quote inside a string (always
+// escaped) cannot have.
+func withoutCacheControl(raw []byte) []byte {
+	if !bytes.Contains(raw, cacheControlKey) {
+		return raw
+	}
+	out := make([]byte, 0, len(raw))
+	i := 0 // raw[:i] is decided
+	for {
+		j := bytes.Index(raw[i:], cacheControlKey)
+		if j < 0 {
+			break
+		}
+		j += i
+		keyEnd := j + len(cacheControlKey)
+		p := j - 1
+		for p >= i && jsonSpace(raw[p]) {
+			p--
+		}
+		colon := skipSpace(raw, keyEnd)
+		if p < i || (raw[p] != '{' && raw[p] != ',') || colon >= len(raw) || raw[colon] != ':' {
+			out = append(out, raw[i:keyEnd]...)
+			i = keyEnd
+			continue
+		}
+		end := jsonValueEnd(raw, skipSpace(raw, colon+1))
+		if end < 0 {
+			return raw
+		}
+		if raw[p] == ',' {
+			// ...,"cache_control":{...}  → drop the comma before it
+			out = append(out, raw[i:p]...)
+			i = end
+		} else {
+			// {"cache_control":{...},... → drop the comma after it
+			out = append(out, raw[i:j]...)
+			next := skipSpace(raw, end)
+			if next < len(raw) && raw[next] == ',' {
+				next = skipSpace(raw, next+1)
+			}
+			i = next
+		}
+	}
+	return append(out, raw[i:]...)
+}
