@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings `AI_OBSERVER_HTTP_PROXY_ENABLED`, `_HOST`, `_PORT`, `_UPSTREAM` and `AI_OBSERVER_HTTP_CAPTURE_MODE` (`safe`, `metadata_only`, `full_raw`), `_DIR`, `_MAX_BODY_BYTES`, `_QUEUE_SIZE`, `_RETENTION_DAYS`, `_STORAGE_LIMIT`, `_ALLOW_REMOTE`; flags `--http-proxy` and `--http-proxy-port`. Credential headers are never stored, in any mode.
 - `cmd/fake-anthropic` (`make fake-anthropic`): a simulated Messages API for keyless demonstrations, used by the teaching demo.
 
+### Fixed
+
+- **A plain `docker build .` on Apple Silicon gave an image that could not start** (`exec /app/ai-observer: no such file or directory`): the Dockerfile's `TARGETARCH` default (`amd64`) chose an amd64 base for an arm64 binary. Both stages now use the target platform, so the image matches the machine it is built on (or `--platform`).
+
 ## [0.8.0] - 2026-11-21
 
 ### Upgrade notes

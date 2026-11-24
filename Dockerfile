@@ -1,5 +1,4 @@
 ARG GOLANG_VERSION=1.26
-ARG TARGETARCH=amd64
 ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
@@ -49,8 +48,12 @@ RUN CGO_ENABLED=1 make all
 # Create data directory for DuckDB
 RUN mkdir -p /app/data
 
-# Runtime stage - distroless for minimal attack surface
-FROM --platform=linux/${TARGETARCH} gcr.io/distroless/cc-debian12:nonroot
+# Runtime stage - distroless for minimal attack surface. Both stages use the
+# target platform (BuildKit's default: the machine's own, or --platform), so
+# the binary and the base image always share an architecture; a fixed
+# TARGETARCH default once paired an arm64 binary with an amd64 base on
+# Apple Silicon ("exec /app/ai-observer: no such file or directory").
+FROM gcr.io/distroless/cc-debian12:nonroot
 
 WORKDIR /app
 COPY --from=builder /app/bin/ai-observer /app/ai-observer
