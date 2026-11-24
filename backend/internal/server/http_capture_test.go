@@ -100,6 +100,7 @@ func captureConfig(t *testing.T, upstream string, enabled bool) *config.Config {
 	cfg.HTTPProxy = config.HTTPProxyConfig{
 		Enabled: enabled, Host: "127.0.0.1", Port: 0, Upstream: upstream,
 		CaptureMode: config.CaptureSafe, MaxBodyBytes: 32 << 20, QueueSize: 1024, RetentionDays: -1,
+		StorageLimit: config.DefaultHTTPCaptureStorageSize,
 	}
 	return cfg
 }
@@ -190,7 +191,7 @@ func TestHTTPInspectorEndToEnd(t *testing.T) {
 	statsBefore := decode[api.StatsResponse](t, c.get(statsURL, "StatsResponse"))
 
 	status := decode[api.HTTPInspectorStatus](t, c.get("/api/http-inspector/status", "HTTPInspectorStatus"))
-	if !status.Enabled || status.CaptureMode != config.CaptureSafe {
+	if !status.Enabled || status.CaptureMode != config.CaptureSafe || status.StorageLimit != config.DefaultHTTPCaptureStorageSize {
 		t.Fatalf("status %+v", status)
 	}
 	created := decode[api.HTTPCaptureRunCreated](t, c.do(http.MethodPost, "/api/http-inspector/runs",

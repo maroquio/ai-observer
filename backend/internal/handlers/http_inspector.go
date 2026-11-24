@@ -85,7 +85,18 @@ func (h *HTTPInspector) Status() api.HTTPInspectorStatus {
 	if h.proxy == nil {
 		return h.off
 	}
-	return h.proxy.Status()
+	// The proxy reports its state; retention and storage settings are the
+	// server's
+	st := h.proxy.Status()
+	st.RetentionDays = h.off.RetentionDays
+	st.StorageLimit = h.off.StorageLimit
+	if st.CaptureDir == "" {
+		st.CaptureDir = h.off.CaptureDir
+	}
+	if st.Warnings == nil {
+		st.Warnings = []string{}
+	}
+	return st
 }
 
 // GetStatus answers GET /api/http-inspector/status
