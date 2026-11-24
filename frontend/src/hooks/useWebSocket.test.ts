@@ -125,6 +125,27 @@ describe('useWebSocket', () => {
 
       expect(useTelemetryStore.getState().recentLogTimes).toHaveLength(1)
     })
+
+    it('counts HTTP Inspector exchange messages', async () => {
+      renderHook(() => useWebSocket('/ws'))
+
+      await waitFor(() => {
+        expect(webSocketManager.isConnected).toBe(true)
+      })
+
+      const before = useTelemetryStore.getState().httpExchangesUpdateCount
+      act(() => {
+        getMockWebSocket().simulateMessage({
+          type: 'http_exchanges',
+          timestamp: new Date().toISOString(),
+          payload: { count: 2, services: ['http-proxy'], timestamps: [Date.now(), Date.now()] },
+        })
+      })
+
+      expect(useTelemetryStore.getState().httpExchangesUpdateCount).toBe(before + 1)
+      // Not mixed into the logs and spans counters
+      expect(useTelemetryStore.getState().recentLogTimes).toHaveLength(0)
+    })
   })
 })
 

@@ -44,6 +44,7 @@ function status(overrides: Partial<StatusResponse> = {}): StatusResponse {
       { tool: 'claude-code', files: 12, records: 3456, lastImport: '2026-11-10T10:00:00Z', partialFiles: 1 },
       { tool: 'codex', files: 0, records: 0, partialFiles: 0 },
     ],
+    httpInspector: statusFixture().httpInspector,
     ...overrides,
   }
 }

@@ -141,6 +141,7 @@ export function useWebSocket(url: string = '/ws') {
   const addSpans = useTelemetryStore((state) => state.addSpans)
   const addMetrics = useTelemetryStore((state) => state.addMetrics)
   const addLogs = useTelemetryStore((state) => state.addLogs)
+  const addHttpExchanges = useTelemetryStore((state) => state.addHttpExchanges)
 
   // Use useSyncExternalStore for proper React 18+ subscription
   const isConnected = useSyncExternalStore(
@@ -162,8 +163,11 @@ export function useWebSocket(url: string = '/ws') {
       case 'logs':
         addLogs(message.payload)
         break
+      case 'http_exchanges':
+        addHttpExchanges(message.payload)
+        break
     }
-  }, [addSpans, addMetrics, addLogs])
+  }, [addSpans, addMetrics, addLogs, addHttpExchanges])
 
   useEffect(() => {
     // Set up message handler

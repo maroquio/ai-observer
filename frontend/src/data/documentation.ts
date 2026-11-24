@@ -56,6 +56,7 @@ export const DOCUMENTATION_SECTIONS: DocSection[] = [
           'Logs - Searchable log records with severity filtering',
           'Traces - Distributed trace visualization with waterfall view',
           'Sessions - Conversations of your AI tools and their transcripts',
+          'HTTP Inspector - The Claude Code requests to the Anthropic API captured by a local proxy (opt-in; documented in Portuguese below)',
           'Status - Version, endpoints, database and settings of the running server',
           'Documentation - This help page',
         ],
@@ -654,6 +655,118 @@ export const DOCUMENTATION_SECTIONS: DocSection[] = [
       {
         type: 'paragraph',
         text: 'A session that arrived both over OTLP and from its session file (import, watch or serve --watch) shows each message once, filled in with what the other records add (tool name, usage, duration): Claude Code messages are matched by entry, request and tool call IDs, Codex messages by tool call ID and prompts by time and text, Gemini CLI messages by prompt text and time, response token counts and tool arguments. The session list counts messages and usage the same way. Claude Code replies sent over OTLP (assistant_response, with content logging) appear with the usage of their request.',
+      },
+    ],
+  },
+  {
+    id: 'http-inspector',
+    title: 'HTTP Inspector',
+    subsections: [
+      { id: 'http-inspector-what', title: 'O que é capturado' },
+      { id: 'http-inspector-enabling', title: 'Como ativar' },
+      { id: 'http-inspector-modes', title: 'Modos de captura' },
+      { id: 'http-inspector-views', title: 'Onde ver' },
+      { id: 'http-inspector-sources', title: 'Fontes separadas' },
+      { id: 'http-inspector-limits', title: 'O que não é visível' },
+    ],
+    content: [
+      {
+        type: 'paragraph',
+        text: 'O HTTP Inspector mostra o tráfego entre o Claude Code e a API da Anthropic como ele passou pela rede: cada requisição, a resposta (inclusive o stream SSE evento a evento), o uso de tokens e cache e o que mudou de uma requisição para a seguinte. Ele existe para ensinar e investigar como um agente de código conversa com o modelo.',
+      },
+      {
+        type: 'heading',
+        level: 3,
+        text: 'O que é capturado',
+      },
+      {
+        type: 'list',
+        items: [
+          'Trocas (exchanges) - Cada requisição que passa pelo proxy e sua resposta: POST /v1/messages (inferência), POST /v1/messages/count_tokens (contagem de tokens, uma estimativa sem geração), outros endpoints e erros de transporte. Nada é escondido por padrão: erros 4xx/5xx, retries e contagens de tokens aparecem na linha do tempo.',
+          'Corpos e cabeçalhos - O corpo da requisição (system, mensagens, ferramentas, parâmetros, cache_control) e o da resposta, interpretados e também como foram gravados. Cabeçalhos de credenciais (x-api-key, authorization, cookies) nunca são gravados: aparecem como mascarados.',
+          'Stream SSE - Os eventos de uma resposta em streaming, em ordem, com o tempo desde o início da requisição.',
+          'Usage e custo - Os campos de usage como a API os informou (input, output, leitura e escrita de cache, com a divisão 5 min / 1 h), os totais derivados com suas fórmulas, a evolução no stream e um custo equivalente de API estimado pelo catálogo de preços. Um campo ausente é mostrado como "ausente", nunca como 0.',
+          'Vínculo com a sessão - Cada troca é ligada à sessão do Claude Code pelo cabeçalho X-Claude-Code-Session-Id ou pelo metadata.user_id do corpo; sem nenhum dos dois ela aparece como "não correlacionada".',
+        ],
+      },
+      {
+        type: 'heading',
+        level: 3,
+        text: 'Como ativar',
+      },
+      {
+        type: 'paragraph',
+        text: 'O proxy vem desligado. Inicie o servidor com --http-proxy (ou AI_OBSERVER_HTTP_PROXY_ENABLED=true) e rode o Claude Code pelo launcher, que abre uma porta de captura só para ele e aponta ANTHROPIC_BASE_URL para ela. Ao terminar, o launcher imprime o endereço da execução no dashboard (/http-inspector/runs/<id>).',
+      },
+      {
+        type: 'code',
+        text: 'Capturar uma sessão do Claude Code',
+        code: 'ai-observer serve --http-proxy\nai-observer run -- claude',
+      },
+      {
+        type: 'paragraph',
+        text: 'Também é possível apontar ANTHROPIC_BASE_URL manualmente para a porta compartilhada do proxy (padrão 8787, AI_OBSERVER_HTTP_PROXY_PORT). Por padrão o proxy só escuta em loopback (outra interface exige AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE) e só encaminha para um destino fixo (AI_OBSERVER_HTTP_PROXY_UPSTREAM, padrão https://api.anthropic.com). A captura nunca atrasa o tráfego: se a fila encher, registros são descartados e contados, e a troca aparece como "captura degradada".',
+      },
+      {
+        type: 'heading',
+        level: 3,
+        text: 'Modos de captura',
+      },
+      {
+        type: 'table',
+        table: {
+          headers: ['Modo', 'O que é gravado'],
+          rows: [
+            { cells: ['safe', 'Padrão. Corpos com segredos mascarados ([REDACTED:tipo]) antes de gravar; metadados, usage, eventos SSE e interpretação.'] },
+            { cells: ['metadata_only', 'Nenhum corpo: só status, tempos, modelo, usage, tamanhos, hashes e a estrutura interpretada.'] },
+            { cells: ['full_raw', 'Também os corpos exatamente como passaram pela rede, sem mascarar, em arquivos locais. Opção explícita para uso controlado em aula; esses corpos nunca são exportados.'] },
+          ],
+        },
+      },
+      {
+        type: 'paragraph',
+        text: 'O modo é definido por AI_OBSERVER_HTTP_CAPTURE_MODE. Em qualquer modo, credenciais nunca são armazenadas, e a exportação de uma execução (zip) leva só as variantes seguras (redigidas).',
+      },
+      {
+        type: 'heading',
+        level: 3,
+        text: 'Onde ver',
+      },
+      {
+        type: 'list',
+        items: [
+          'Sessões - A página de uma sessão ganha a aba "Tráfego da API": resumo (trocas, erros e retries, tokens e cache, tempo, custo estimado, vínculo com a sessão e a comparação com a telemetria), a linha do tempo filtrável das trocas e as ferramentas (tool_use → tool_result). A lista de sessões mostra quantas trocas cada sessão tem.',
+          'HTTP Inspector (barra lateral) - O status do proxy e as execuções de captura. Cada execução tem sua página, com a linha do tempo (também das trocas sem sessão), as ferramentas, renomear, anotar, exportar o zip sanitizado e excluir (quando não está ativa).',
+          'Inspetor de uma troca - Abre em um endereço próprio, que funciona ao recarregar ou compartilhar: Resumo (o que foi enviado, o que foi recebido, o que aconteceu, com a evidência de cada afirmação e a origem do dado: wire, otel, jsonl ou derivado), Request, Response, SSE Stream, Tokens & Cache e Context Diff (o que a requisição mudou em relação à anterior da mesma conversa).',
+          'Ao vivo - Linha do tempo, resumos e execuções se atualizam quando o proxy grava novas trocas.',
+        ],
+      },
+      {
+        type: 'heading',
+        level: 3,
+        text: 'Fontes separadas',
+      },
+      {
+        type: 'paragraph',
+        text: 'O proxy é uma fonte separada de OTLP e dos arquivos de sessão (JSONL). Quando a mesma requisição aparece nas duas, o AI Observer as compara pelo request_id e mostra a certeza da correspondência (exata, parcial ou nenhuma), mas nunca soma os números: tokens e custos do proxy aparecem só no HTTP Inspector e não entram nos totais de sessões, métricas e dashboards.',
+      },
+      {
+        type: 'heading',
+        level: 3,
+        text: 'O que não é visível',
+      },
+      {
+        type: 'list',
+        items: [
+          'Execução local de ferramentas - O proxy vê o modelo pedir uma ferramenta (tool_use) e o cliente devolver o resultado (tool_result) no request seguinte; a execução em si (comandos, leitura e edição de arquivos) acontece no computador e não passa pela rede.',
+          'Cobrança de assinatura - O custo mostrado é o equivalente na API pelo catálogo de preços, uma estimativa. Ele não é a cobrança de planos por assinatura (login OAuth, Pro/Max), que o proxy não vê.',
+          'Raciocínio não transmitido - Blocos de thinking só aparecem como a API os enviou; o que o modelo não transmitiu não pode ser observado.',
+          'Tráfego fora do proxy - Requisições que não usam ANTHROPIC_BASE_URL apontado para o proxy não são capturadas.',
+        ],
+      },
+      {
+        type: 'note',
+        text: 'Conteúdo capturado é tratado como não confiável: o dashboard o mostra sempre como texto, nunca como HTML, Markdown ou link.',
       },
     ],
   },

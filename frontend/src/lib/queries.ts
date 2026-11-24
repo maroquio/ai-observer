@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { api, type MetricQuery } from '@/lib/api'
+import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
+import { api, type HTTPExchangeQuery, type MetricQuery } from '@/lib/api'
 import { resolveRangeParams, type RangeSource, type TimeSelectionKey } from '@/lib/timeUtils'
 import { useProviderStore } from '@/stores/providerStore'
 import type { TraceKind } from '@/types/traces'
 import type { HistogramStat } from '@/types/metrics'
+import type { HTTPBodyPart, HTTPCaptureRunMode, HTTPCaptureRunState, HTTPToolLink } from '@/types/httpInspector'
 
 // Query keys and hooks of every read endpoint. Keys are arrays starting with
 // the resource, so queryClient.invalidateQueries({ queryKey: queryKeys.logs.all })
@@ -30,6 +31,15 @@ export interface SessionFilters {
   service?: string
   // Words and "quoted phrases" one record of the session must all contain
   search?: string
+}
+
+// Filters of the HTTP Inspector's exchange lists (HTTPExchangeQuery without
+// the page)
+export type HTTPExchangeFilters = Omit<HTTPExchangeQuery, 'limit' | 'cursor'>
+
+export interface HTTPRunFilters {
+  mode?: HTTPCaptureRunMode
+  state?: HTTPCaptureRunState
 }
 
 export interface MetricPointFilters {
@@ -147,6 +157,32 @@ export const queryKeys = {
     list: ['dashboards', 'list'] as const,
     default: ['dashboards', 'default'] as const,
     detail: (id: string) => ['dashboards', 'detail', id] as const,
+  },
+  // The HTTP Inspector. Lists and summaries live under runs, run(id) and
+  // session(id); an exchange's detail, bodies and events under exchange(id),
+  // which live notifications only refresh while the exchange is in progress.
+  httpInspector: {
+    all: ['http-inspector'] as const,
+    status: ['http-inspector', 'status'] as const,
+    runs: ['http-inspector', 'runs'] as const,
+    runList: (filters: HTTPRunFilters) => ['http-inspector', 'runs', clean(filters)] as const,
+    run: (runId: string) => ['http-inspector', 'run', runId] as const,
+    runDetail: (runId: string) => ['http-inspector', 'run', runId, 'detail'] as const,
+    runExchanges: (runId: string, filters: HTTPExchangeFilters) => ['http-inspector', 'run', runId, 'exchanges', clean(filters)] as const,
+    runTools: (runId: string) => ['http-inspector', 'run', runId, 'tools'] as const,
+    sessions: ['http-inspector', 'session'] as const,
+    session: (sessionId: string) => ['http-inspector', 'session', sessionId] as const,
+    sessionSummary: (sessionId: string) => ['http-inspector', 'session', sessionId, 'summary'] as const,
+    sessionExchanges: (sessionId: string, filters: HTTPExchangeFilters) =>
+      ['http-inspector', 'session', sessionId, 'exchanges', clean(filters)] as const,
+    exchange: (exchangeId: string) => ['http-inspector', 'exchange', exchangeId] as const,
+    exchangeDetail: (exchangeId: string) => ['http-inspector', 'exchange', exchangeId, 'detail'] as const,
+    exchangeBody: (exchangeId: string, part: HTTPBodyPart, variant: 'safe' | 'raw') =>
+      ['http-inspector', 'exchange', exchangeId, 'body', part, variant] as const,
+    exchangeEvents: (exchangeId: string, type: string) => ['http-inspector', 'exchange', exchangeId, 'events', type || null] as const,
+    exchangeEventTypes: (exchangeId: string) => ['http-inspector', 'exchange', exchangeId, 'event-types'] as const,
+    exchangeUsage: (exchangeId: string) => ['http-inspector', 'exchange', exchangeId, 'usage'] as const,
+    exchangeDiff: (exchangeId: string) => ['http-inspector', 'exchange', exchangeId, 'diff'] as const,
   },
   // useNewItems: count of a list's items since an anchor (Unix ms), asked
   // again when more records were announced in real time
@@ -388,6 +424,206 @@ export function useTranscriptSearch(sessionId: string, search: string, options: 
     },
     ...options,
     enabled: Boolean(sessionId && search.trim()) && (options.enabled ?? true),
+  })
+}
+
+// ============================================================================
+// HTTP Inspector
+// ============================================================================
+
+// Pages of exchange lists and stream events: the API's largest pages, since
+// the lists are virtualized
+export const HTTP_EXCHANGES_PAGE_SIZE = 500
+export const HTTP_EVENTS_PAGE_SIZE = 1000
+export const HTTP_RUNS_PAGE_SIZE = 50
+
+function nextCursor(last: { hasMore: boolean; nextCursor?: string }): string | undefined {
+  return last.hasMore && last.nextCursor ? last.nextCursor : undefined
+}
+
+/** The capture proxy: configuration and counters (GET /api/http-inspector/status) */
+export function useHTTPInspectorStatus(options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.status,
+    queryFn: ({ signal }) => api.getHTTPInspectorStatus({ signal }),
+    ...options,
+  })
+}
+
+/** Capture runs, newest first, a page at a time (data.pages[i].runs) */
+export function useHTTPCaptureRuns(filters: HTTPRunFilters = {}, options: QueryOptions = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.httpInspector.runList(filters),
+    queryFn: ({ signal, pageParam }) =>
+      api.getHTTPCaptureRuns({ ...clean(filters), limit: HTTP_RUNS_PAGE_SIZE, cursor: pageParam }, { signal }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextCursor,
+    ...options,
+  })
+}
+
+/** A capture run with its summary */
+export function useHTTPCaptureRun(runId: string, options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.runDetail(runId),
+    queryFn: ({ signal }) => api.getHTTPCaptureRun(runId, { signal }),
+    ...options,
+    enabled: Boolean(runId) && (options.enabled ?? true),
+  })
+}
+
+/** A run's exchanges in arrival order, 500 a page (data.pages[i].exchanges) */
+export function useHTTPRunExchanges(runId: string, filters: HTTPExchangeFilters, options: QueryOptions = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.httpInspector.runExchanges(runId, filters),
+    queryFn: ({ signal, pageParam }) =>
+      api.getHTTPRunExchanges(runId, { ...clean(filters), limit: HTTP_EXCHANGES_PAGE_SIZE, cursor: pageParam }, { signal }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextCursor,
+    placeholderData: keepPreviousData,
+    ...options,
+    enabled: Boolean(runId) && (options.enabled ?? true),
+  })
+}
+
+/** A run's tool uses and the exchanges that requested and returned them */
+export function useHTTPRunTools(runId: string, options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.runTools(runId),
+    queryFn: ({ signal }) => api.getHTTPRunTools(runId, { signal }),
+    ...options,
+    enabled: Boolean(runId) && (options.enabled ?? true),
+  })
+}
+
+/**
+ * The tool links of a session: those of the runs that carried it, kept
+ * when their session is this one (tool links are listed per run). note is
+ * the server's reminder that local execution is not observed.
+ */
+export function useSessionToolLinks(sessionId: string, runIds: string[], options: QueryOptions = {}) {
+  return useQueries({
+    queries: runIds.map((runId) => ({
+      queryKey: queryKeys.httpInspector.runTools(runId),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.getHTTPRunTools(runId, { signal }),
+      enabled: options.enabled ?? true,
+    })),
+    combine: (results) => {
+      const tools: HTTPToolLink[] = []
+      let note = ''
+      for (const result of results) {
+        note ||= result.data?.note ?? ''
+        for (const link of result.data?.tools ?? []) {
+          if (link.sessionId === sessionId) tools.push(link)
+        }
+      }
+      const failed = results.find((r) => r.isError)
+      return {
+        tools,
+        note,
+        isPending: results.some((r) => r.isPending),
+        isError: Boolean(failed),
+        error: failed?.error ?? null,
+        isFetching: results.some((r) => r.isFetching),
+        refetch: () => results.forEach((r) => void r.refetch()),
+      }
+    },
+  })
+}
+
+/**
+ * The summary of a session's API traffic (all its exchanges, whatever the
+ * filters), the runs that carried it and the comparison with its telemetry.
+ * An empty summary (exchanges 0) when nothing was captured.
+ */
+export function useSessionTrafficSummary(sessionId: string, options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.sessionSummary(sessionId),
+    queryFn: ({ signal }) => api.getSessionHTTPExchanges(sessionId, { limit: 1 }, { signal }),
+    // Shared by the page's tab badge and the tab itself: opening the tab
+    // does not load it again (new exchanges invalidate it)
+    staleTime: 10_000,
+    ...options,
+    enabled: Boolean(sessionId) && (options.enabled ?? true),
+  })
+}
+
+/** A session's exchanges in start order, 500 a page */
+export function useSessionExchanges(sessionId: string, filters: HTTPExchangeFilters, options: QueryOptions = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.httpInspector.sessionExchanges(sessionId, filters),
+    queryFn: ({ signal, pageParam }) =>
+      api.getSessionHTTPExchanges(sessionId, { ...clean(filters), limit: HTTP_EXCHANGES_PAGE_SIZE, cursor: pageParam }, { signal }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextCursor,
+    placeholderData: keepPreviousData,
+    ...options,
+    enabled: Boolean(sessionId) && (options.enabled ?? true),
+  })
+}
+
+/** An exchange with its lifecycle, observations and run neighbours */
+export function useHTTPExchange(exchangeId: string, options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.exchangeDetail(exchangeId),
+    queryFn: ({ signal }) => api.getHTTPExchange(exchangeId, { signal }),
+    ...options,
+    enabled: Boolean(exchangeId) && (options.enabled ?? true),
+  })
+}
+
+/** One side of an exchange (headers, body, interpretation) */
+export function useHTTPExchangeBody(exchangeId: string, part: HTTPBodyPart, variant: 'safe' | 'raw' = 'safe', options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.exchangeBody(exchangeId, part, variant),
+    queryFn: ({ signal }) => api.getHTTPExchangeBody(exchangeId, part, variant, { signal }),
+    ...options,
+    enabled: Boolean(exchangeId) && (options.enabled ?? true),
+  })
+}
+
+/** A streamed response's events in order, 1,000 a page; type filters them */
+export function useHTTPExchangeEvents(exchangeId: string, type: string, options: QueryOptions = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.httpInspector.exchangeEvents(exchangeId, type),
+    queryFn: ({ signal, pageParam }) =>
+      api.getHTTPExchangeEvents(exchangeId, { type: type || undefined, limit: HTTP_EVENTS_PAGE_SIZE, cursor: pageParam }, { signal }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: nextCursor,
+    placeholderData: keepPreviousData,
+    ...options,
+    enabled: Boolean(exchangeId) && (options.enabled ?? true),
+  })
+}
+
+/** The counts of a streamed response's events by type (one event read) */
+export function useHTTPExchangeEventTypes(exchangeId: string, options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.exchangeEventTypes(exchangeId),
+    queryFn: ({ signal }) => api.getHTTPExchangeEvents(exchangeId, { limit: 1 }, { signal }),
+    select: (data) => data.types ?? {},
+    ...options,
+    enabled: Boolean(exchangeId) && (options.enabled ?? true),
+  })
+}
+
+/** An exchange's usage, stream snapshots and cost; null without usage */
+export function useHTTPExchangeUsage(exchangeId: string, options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.exchangeUsage(exchangeId),
+    queryFn: ({ signal }) => api.getHTTPExchangeUsage(exchangeId, { signal }),
+    ...options,
+    enabled: Boolean(exchangeId) && (options.enabled ?? true),
+  })
+}
+
+/** The request compared with the previous one of its conversation */
+export function useHTTPExchangeDiff(exchangeId: string, options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.exchangeDiff(exchangeId),
+    queryFn: ({ signal }) => api.getHTTPExchangeDiff(exchangeId, { signal }),
+    ...options,
+    enabled: Boolean(exchangeId) && (options.enabled ?? true),
   })
 }
 

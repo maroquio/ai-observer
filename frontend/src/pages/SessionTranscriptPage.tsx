@@ -1,6 +1,6 @@
 import { createElement, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, ChevronUp, Clock, MessageSquare, RefreshCw, Search } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronUp, Clock, MessageSquare, Network, RefreshCw, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,16 +9,17 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopyButton } from '@/components/common/copy-button'
 import { EmptyState } from '@/components/common/empty-state'
 import { ListSkeleton } from '@/components/common/list-skeleton'
 import { QueryError } from '@/components/common/query-error'
+import { SessionTrafficTab } from '@/components/http-inspector/SessionTrafficTab'
 import { ChatBubbleView } from '@/components/sessions/ChatBubbleView'
 import { TimelineView } from '@/components/sessions/TimelineView'
-import { errorText, isTimeoutError } from '@/lib/errors'
+import { errorText, isHTTPError, isTimeoutError } from '@/lib/errors'
 import { formatCost, formatCount, formatTimeSpan, formatTokens } from '@/lib/format'
-import { queryKeys, useSessionTranscript, useTranscriptSearch } from '@/lib/queries'
+import { queryKeys, useSessionTrafficSummary, useSessionTranscript, useTranscriptSearch } from '@/lib/queries'
 import {
   countRoles,
   DEFAULT_TRANSCRIPT_FILTERS,
@@ -35,6 +36,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useLiveInvalidate } from '@/hooks/useLiveInvalidate'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useServiceNames } from '@/hooks/useServiceNames'
+import { useUrlFilters, useUrlWriter, type UrlWriter } from '@/hooks/useUrlState'
 import { useTelemetryStore } from '@/stores/telemetryStore'
 import type { TranscriptTotals } from '@/types/sessions'
 
@@ -45,6 +47,9 @@ const SEARCH_DEBOUNCE_MS = 300
 
 // The tab title shows the start of the session's title
 const DOCUMENT_TITLE_CHARS = 60
+
+// The page's section in the URL: ?view=traffic opens the API traffic tab
+const PAGE_URL_DEFAULTS = { view: 'transcript' }
 
 const NO_MATCHES: readonly number[] = []
 const NO_TERMS: readonly string[] = []
@@ -103,6 +108,21 @@ interface SessionTranscriptProps {
 function SessionTranscript({ sessionId, backButton, viewMode, onViewModeChange }: SessionTranscriptProps) {
   const { displayName } = useServiceNames()
   const [filters, setFilters] = useLocalStorage<TranscriptFilters>(TRANSCRIPT_FILTERS_STORAGE_KEY, DEFAULT_TRANSCRIPT_FILTERS)
+
+  // ---- API traffic captured by the HTTP Inspector (a tab of its own) ----
+  const url = useUrlWriter()
+  const [{ view }, setPageUrl] = useUrlFilters(PAGE_URL_DEFAULTS, url)
+  const traffic = useSessionTrafficSummary(sessionId)
+  const trafficCount = traffic.data?.summary.exchanges ?? 0
+  const httpExchangesUpdateCount = useTelemetryStore((state) => state.httpExchangesUpdateCount)
+  useLiveInvalidate({
+    queryKey: [queryKeys.httpInspector.session(sessionId), ['http-inspector', 'run']],
+    enabled: true,
+    intervalMs: 30_000,
+    updateCount: httpExchangesUpdateCount,
+    debounceMs: 1000,
+    maxWaitMs: 5000,
+  })
 
   // The transcript a page (500 messages) at a time. The key holds the
   // session, so a page of another session that arrives late is dropped.
@@ -205,7 +225,11 @@ function SessionTranscript({ sessionId, backButton, viewMode, onViewModeChange }
     { key: 'showToolResult', label: 'Tool results', count: loadedCounts.tool_result, suffix: loadedSuffix },
   ]
 
-  if (query.isPending) {
+  // A session seen only by the HTTP Inspector's proxy has no transcript
+  // (404) but has traffic: show that
+  const transcriptMissing = query.isError && !query.data && isHTTPError(query.error, 404)
+
+  if (query.isPending || (transcriptMissing && traffic.isPending)) {
     return (
       <div className="space-y-6">
         {backButton}
@@ -216,6 +240,32 @@ function SessionTranscript({ sessionId, backButton, viewMode, onViewModeChange }
           </CardHeader>
         </Card>
         <ListSkeleton rows={6} rowClassName="h-20" label="Loading transcript" />
+      </div>
+    )
+  }
+
+  if (transcriptMissing && trafficCount > 0) {
+    return (
+      <div className="space-y-6">
+        {backButton}
+        <Card>
+          <CardHeader>
+            <div className="flex items-start gap-4">
+              <Network className="h-10 w-10 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <h1 className="text-xl font-semibold leading-snug">Sessão do Claude Code</h1>
+                <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span className="break-all font-mono">{sessionId}</span>
+                  <CopyButton value={sessionId} label="Copy session ID" className="-my-1 size-7" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Esta sessão só foi vista pelo HTTP Inspector: não há transcript de OTLP nem de arquivo de sessão para ela.
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+        <SessionSections view="traffic" onViewChange={() => {}} trafficCount={trafficCount} sessionId={sessionId} url={url} transcript={null} />
       </div>
     )
   }
@@ -292,176 +342,220 @@ function SessionTranscript({ sessionId, backButton, viewMode, onViewModeChange }
         </CardHeader>
       </Card>
 
-      {/* Transcript */}
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <CardTitle>Transcript</CardTitle>
-            <Tabs value={viewMode} onValueChange={(v) => onViewModeChange(v as 'chat' | 'timeline')}>
-              <TabsList>
-                <TabsTrigger value="chat">Chat</TabsTrigger>
-                <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          {messages.length > 0 && (
-            <>
-              <Separator className="my-3" />
-              <div className="flex flex-col gap-3">
-                {/* Search */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative min-w-48 flex-1">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <Input
-                      type="search"
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          goToMatch(e.shiftKey ? -1 : 1)
-                        }
-                      }}
-                      placeholder='Search this session: words or "a phrase"'
-                      aria-label="Search this session"
-                      className="pl-9"
-                    />
+      <SessionSections
+        view={view === 'traffic' ? 'traffic' : 'transcript'}
+        onViewChange={(next) => setPageUrl({ view: next })}
+        trafficCount={trafficCount}
+        sessionId={sessionId}
+        url={url}
+        transcript={
+          <Card className="overflow-hidden">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <CardTitle>Transcript</CardTitle>
+                <Tabs value={viewMode} onValueChange={(v) => onViewModeChange(v as 'chat' | 'timeline')}>
+                  <TabsList>
+                    <TabsTrigger value="chat">Chat</TabsTrigger>
+                    <TabsTrigger value="timeline">Timeline</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+              {messages.length > 0 && (
+                <>
+                  <Separator className="my-3" />
+                  <div className="flex flex-col gap-3">
+                    {/* Search */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative min-w-48 flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                        <Input
+                          type="search"
+                          value={searchInput}
+                          onChange={(e) => setSearchInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              goToMatch(e.shiftKey ? -1 : 1)
+                            }
+                          }}
+                          placeholder='Search this session: words or "a phrase"'
+                          aria-label="Search this session"
+                          className="pl-9"
+                        />
+                      </div>
+                      {searchStatus && (
+                        <span className={cn('text-sm tabular-nums', searchQuery.isError ? 'text-error' : 'text-muted-foreground')} role="status">
+                          {searchStatus}
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-sm"
+                        aria-label="Previous match"
+                        disabled={matches.length === 0}
+                        onClick={() => goToMatch(-1)}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-sm"
+                        aria-label="Next match"
+                        disabled={matches.length === 0}
+                        onClick={() => goToMatch(1)}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {/* Filters */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="mr-1 text-sm text-muted-foreground">Show:</span>
+                      {roleFilters.map(({ key, label, count, suffix }) => (
+                        <Button
+                          key={key}
+                          type="button"
+                          size="sm"
+                          variant={filters[key] ? 'secondary' : 'outline'}
+                          aria-pressed={filters[key]}
+                          onClick={() => toggleRole(key)}
+                          disabled={count === 0}
+                        >
+                          {label} ({formatCount(count)}{suffix})
+                        </Button>
+                      ))}
+
+                      <Separator orientation="vertical" className="mx-1 h-6" />
+
+                      <div className="flex items-center gap-2" title="Assistant responses of OTLP events, which carry tokens and cost but no content">
+                        <Switch
+                          id="transcript-show-metadata-only"
+                          checked={!filters.hideMetadataOnlyAssistant}
+                          onCheckedChange={(checked) => setFilters((prev) => ({ ...prev, hideMetadataOnlyAssistant: !checked }))}
+                          disabled={loadedCounts.metadataOnlyAssistant === 0}
+                        />
+                        <Label htmlFor="transcript-show-metadata-only" className="font-normal">
+                          Show responses without content ({formatCount(loadedCounts.metadataOnlyAssistant)}{loadedSuffix})
+                        </Label>
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={resetFilters}
+                        disabled={!filtersChanged}
+                        className="ml-auto"
+                      >
+                        Reset
+                      </Button>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      Showing {formatCount(filtered.messages.length)} of {formatCount(loaded)}
+                      {allLoaded ? ' messages' : ` loaded messages (${formatCount(totalMessages)} in the session)`}
+                    </div>
                   </div>
-                  {searchStatus && (
-                    <span className={cn('text-sm tabular-nums', searchQuery.isError ? 'text-error' : 'text-muted-foreground')} role="status">
-                      {searchStatus}
+                </>
+              )}
+            </CardHeader>
+            <CardContent>
+              {messages.length === 0 ? (
+                <EmptyState title="No messages in this session" icon={MessageSquare} />
+              ) : filtered.messages.length === 0 ? (
+                <EmptyState
+                  title="No messages match your current filters."
+                  action={
+                    <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
+                      Reset filters
+                    </Button>
+                  }
+                />
+              ) : viewMode === 'chat' ? (
+                <ChatBubbleView
+                  messages={filtered.messages}
+                  positions={filtered.positions}
+                  highlight={terms}
+                  activePosition={activePosition}
+                  revealKey={revealKey}
+                />
+              ) : (
+                <TimelineView
+                  messages={filtered.messages}
+                  positions={filtered.positions}
+                  highlight={terms}
+                  activePosition={activePosition}
+                  revealKey={revealKey}
+                />
+              )}
+              {!allLoaded && (
+                <div className="mt-6 flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                  <span>
+                    Loaded the first {formatCount(loaded)} of {formatCount(totalMessages)} messages
+                  </span>
+                  {isFetchNextPageError && (
+                    <span className="text-error" role="alert">
+                      {isTooLarge(query.error)
+                        ? 'This session has too many records to load in time'
+                        : errorText(query.error, 'Failed to load more messages')}
                     </span>
                   )}
                   <Button
                     type="button"
                     variant="outline"
-                    size="icon-sm"
-                    aria-label="Previous match"
-                    disabled={matches.length === 0}
-                    onClick={() => goToMatch(-1)}
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    aria-label="Next match"
-                    disabled={matches.length === 0}
-                    onClick={() => goToMatch(1)}
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {/* Filters */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="mr-1 text-sm text-muted-foreground">Show:</span>
-                  {roleFilters.map(({ key, label, count, suffix }) => (
-                    <Button
-                      key={key}
-                      type="button"
-                      size="sm"
-                      variant={filters[key] ? 'secondary' : 'outline'}
-                      aria-pressed={filters[key]}
-                      onClick={() => toggleRole(key)}
-                      disabled={count === 0}
-                    >
-                      {label} ({formatCount(count)}{suffix})
-                    </Button>
-                  ))}
-
-                  <Separator orientation="vertical" className="mx-1 h-6" />
-
-                  <div className="flex items-center gap-2" title="Assistant responses of OTLP events, which carry tokens and cost but no content">
-                    <Switch
-                      id="transcript-show-metadata-only"
-                      checked={!filters.hideMetadataOnlyAssistant}
-                      onCheckedChange={(checked) => setFilters((prev) => ({ ...prev, hideMetadataOnlyAssistant: !checked }))}
-                      disabled={loadedCounts.metadataOnlyAssistant === 0}
-                    />
-                    <Label htmlFor="transcript-show-metadata-only" className="font-normal">
-                      Show responses without content ({formatCount(loadedCounts.metadataOnlyAssistant)}{loadedSuffix})
-                    </Label>
-                  </div>
-
-                  <Button
-                    type="button"
                     size="sm"
-                    variant="ghost"
-                    onClick={resetFilters}
-                    disabled={!filtersChanged}
-                    className="ml-auto"
+                    className="gap-2"
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
                   >
-                    Reset
+                    {isFetchNextPageError && <RefreshCw className="h-3 w-3" />}
+                    {isFetchingNextPage ? 'Loading...' : isFetchNextPageError ? 'Try again' : 'Load more messages'}
                   </Button>
                 </div>
-
-                <div className="text-xs text-muted-foreground">
-                  Showing {formatCount(filtered.messages.length)} of {formatCount(loaded)}
-                  {allLoaded ? ' messages' : ` loaded messages (${formatCount(totalMessages)} in the session)`}
-                </div>
-              </div>
-            </>
-          )}
-        </CardHeader>
-        <CardContent>
-          {messages.length === 0 ? (
-            <EmptyState title="No messages in this session" icon={MessageSquare} />
-          ) : filtered.messages.length === 0 ? (
-            <EmptyState
-              title="No messages match your current filters."
-              action={
-                <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
-                  Reset filters
-                </Button>
-              }
-            />
-          ) : viewMode === 'chat' ? (
-            <ChatBubbleView
-              messages={filtered.messages}
-              positions={filtered.positions}
-              highlight={terms}
-              activePosition={activePosition}
-              revealKey={revealKey}
-            />
-          ) : (
-            <TimelineView
-              messages={filtered.messages}
-              positions={filtered.positions}
-              highlight={terms}
-              activePosition={activePosition}
-              revealKey={revealKey}
-            />
-          )}
-          {!allLoaded && (
-            <div className="mt-6 flex flex-col items-center gap-2 text-sm text-muted-foreground">
-              <span>
-                Loaded the first {formatCount(loaded)} of {formatCount(totalMessages)} messages
-              </span>
-              {isFetchNextPageError && (
-                <span className="text-error" role="alert">
-                  {isTooLarge(query.error)
-                    ? 'This session has too many records to load in time'
-                    : errorText(query.error, 'Failed to load more messages')}
-                </span>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-              >
-                {isFetchNextPageError && <RefreshCw className="h-3 w-3" />}
-                {isFetchingNextPage ? 'Loading...' : isFetchNextPageError ? 'Try again' : 'Load more messages'}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        }
+      />
     </div>
+  )
+}
+
+interface SessionSectionsProps {
+  view: 'transcript' | 'traffic'
+  onViewChange: (view: 'transcript' | 'traffic') => void
+  // Exchanges the HTTP Inspector captured for the session
+  trafficCount: number
+  sessionId: string
+  url: UrlWriter
+  // The transcript card; null when the session has no transcript
+  transcript: ReactNode
+}
+
+// The session's transcript and its API traffic (HTTP Inspector), as tabs
+function SessionSections({ view, onViewChange, trafficCount, sessionId, url, transcript }: SessionSectionsProps) {
+  return (
+    <Tabs value={view} onValueChange={(v) => onViewChange(v === 'traffic' ? 'traffic' : 'transcript')} className="gap-4">
+      <TabsList aria-label="Seções da sessão">
+        <TabsTrigger value="transcript" disabled={transcript === null}>
+          Transcript
+        </TabsTrigger>
+        <TabsTrigger value="traffic">
+          Tráfego da API
+          {trafficCount > 0 && (
+            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px]">
+              {formatCount(trafficCount)}
+            </Badge>
+          )}
+        </TabsTrigger>
+      </TabsList>
+      {transcript !== null && <TabsContent value="transcript">{transcript}</TabsContent>}
+      <TabsContent value="traffic">
+        <SessionTrafficTab sessionId={sessionId} url={url} />
+      </TabsContent>
+    </Tabs>
   )
 }
 

@@ -15,6 +15,8 @@ interface TelemetryState {
   spansUpdateCount: number
   metricsUpdateCount: number
   logsUpdateCount: number
+  // HTTP Inspector exchanges stored or updated by the capture proxy
+  httpExchangesUpdateCount: number
 
   // Metric data points received in real time. Metrics are only counted: every
   // consumer re-queries the API when they change.
@@ -24,6 +26,7 @@ interface TelemetryState {
   addSpans: (notification: StoredNotification) => void
   addMetrics: (notification: StoredNotification) => void
   addLogs: (notification: StoredNotification) => void
+  addHttpExchanges: (notification: StoredNotification) => void
   clearRecentLogs: () => void
   clearRecentSpans: () => void
 }
@@ -42,6 +45,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   spansUpdateCount: 0,
   metricsUpdateCount: 0,
   logsUpdateCount: 0,
+  httpExchangesUpdateCount: 0,
   metricsReceivedCount: 0,
 
   addSpans: (notification) =>
@@ -60,6 +64,12 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     set((state) => ({
       recentLogTimes: prependTimes(state.recentLogTimes, notification),
       logsUpdateCount: state.logsUpdateCount + 1,
+    })),
+
+  // Exchanges are only counted: inspector pages re-query the API
+  addHttpExchanges: () =>
+    set((state) => ({
+      httpExchangesUpdateCount: state.httpExchangesUpdateCount + 1,
     })),
 
   clearRecentLogs: () =>

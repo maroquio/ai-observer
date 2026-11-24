@@ -121,6 +121,19 @@ describe('SessionsPage', () => {
     expect(within(second).getByText('messages')).toBeInTheDocument()
   })
 
+  it('marks sessions with API traffic captured by the HTTP Inspector', async () => {
+    vi.mocked(api.getSessions).mockResolvedValue({
+      sessions: [{ ...sessions[0], httpExchanges: 12 }, { ...sessions[1], httpExchanges: 0 }],
+      total: 2,
+      hasMore: false,
+    })
+    renderPage()
+    await screen.findByRole('list', { name: 'Sessions' })
+    const [first, second] = rows()
+    expect(within(first).getByText('12 trocas de API')).toBeInTheDocument()
+    expect(within(second).queryByText(/troca/)).not.toBeInTheDocument()
+  })
+
   it('links each row to the transcript, with the list URL to go back to', async () => {
     const user = userEvent.setup()
     renderPage('/sessions?service=claude-code')

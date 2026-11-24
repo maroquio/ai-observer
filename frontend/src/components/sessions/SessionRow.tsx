@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, GitBranch } from 'lucide-react'
+import { ChevronRight, GitBranch, Network } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { CopyButton } from '@/components/common/copy-button'
 import { HighlightedText } from '@/components/common/highlighted-text'
@@ -55,6 +55,16 @@ export const SessionRow = memo(function SessionRow({ session, serviceName, linkS
           <Badge variant="outline" className="shrink-0">
             {serviceName}
           </Badge>
+          {session.httpExchanges !== undefined && session.httpExchanges > 0 && (
+            <Badge
+              variant="secondary"
+              className="shrink-0 gap-1"
+              title="Trocas com a API da Anthropic capturadas pelo HTTP Inspector (veja a aba Tráfego da API da sessão)"
+            >
+              <Network className="h-3 w-3" aria-hidden="true" />
+              {formatCount(session.httpExchanges)} {session.httpExchanges === 1 ? 'troca de API' : 'trocas de API'}
+            </Badge>
+          )}
         </div>
 
         {title && (

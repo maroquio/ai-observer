@@ -9,9 +9,10 @@ import { httpError } from '@/lib/errors'
 import { useTelemetryStore } from '@/stores/telemetryStore'
 import { createTestQueryClient, renderWithProviders } from '@/test/queryWrapper'
 import type { TranscriptMessage, TranscriptResponse } from '@/types/sessions'
+import { emptyTrafficFixture, trafficFixture } from '@/test/httpInspectorFixtures'
 
 vi.mock('@/lib/api', () => ({
-  api: { getSessionTranscript: vi.fn() },
+  api: { getSessionTranscript: vi.fn(), getSessionHTTPExchanges: vi.fn() },
 }))
 
 const transcript: TranscriptResponse = {
@@ -52,6 +53,7 @@ describe('SessionTranscriptPage', () => {
     vi.clearAllMocks()
     localStorage.clear()
     vi.mocked(api.getSessionTranscript).mockResolvedValue(transcript)
+    vi.mocked(api.getSessionHTTPExchanges).mockResolvedValue(emptyTrafficFixture('s1'))
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   })
 
@@ -157,6 +159,53 @@ describe('SessionTranscriptPage', () => {
     vi.mocked(api.getSessionTranscript).mockRejectedValue(httpError(404, 'session not found'))
     renderPage()
     expect(await screen.findByText('session not found')).toBeInTheDocument()
+  })
+
+  describe('API traffic tab', () => {
+    it('explains how to capture traffic when none was captured, without placeholder rows', async () => {
+      const user = userEvent.setup()
+      const { router } = renderPage()
+      await screen.findByText('Please fix the bug')
+
+      const tab = screen.getByRole('tab', { name: 'Tráfego da API' })
+      await user.click(tab)
+      expect(router.state.location.search).toBe('?view=traffic')
+      expect(await screen.findByText('Nenhum tráfego da API capturado para esta sessão')).toBeInTheDocument()
+      const commands = screen.getByLabelText('Comandos para capturar o tráfego')
+      expect(commands).toHaveTextContent('ai-observer serve --http-proxy')
+      expect(commands).toHaveTextContent('ai-observer run -- claude')
+      expect(screen.queryByRole('table', { name: 'Linha do tempo das trocas' })).not.toBeInTheDocument()
+      // Only the summary request: no exchange list without captures
+      expect(api.getSessionHTTPExchanges).toHaveBeenCalledTimes(1)
+      expect(api.getSessionHTTPExchanges).toHaveBeenCalledWith('s1', { limit: 1 }, expect.anything())
+
+      await user.click(screen.getByRole('tab', { name: 'Transcript' }))
+      expect(router.state.location.search).toBe('')
+      expect(screen.getByText('Please fix the bug')).toBeInTheDocument()
+    })
+
+    it('counts the captured exchanges on the tab', async () => {
+      vi.mocked(api.getSessionHTTPExchanges).mockResolvedValue(trafficFixture())
+      renderPage()
+      await screen.findByText('Please fix the bug')
+      expect(await screen.findByRole('tab', { name: 'Tráfego da API 7' })).toBeInTheDocument()
+    })
+
+    it('shows the traffic of a session the proxy saw but no transcript has', async () => {
+      vi.mocked(api.getSessionTranscript).mockRejectedValue(httpError(404, 'session not found'))
+      vi.mocked(api.getSessionHTTPExchanges).mockResolvedValue(trafficFixture())
+      renderPage()
+      expect(await screen.findByRole('table', { name: 'Linha do tempo das trocas' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Transcript' })).toBeDisabled()
+      expect(screen.getByRole('tab', { name: /Tráfego da API/ })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.queryByText('session not found')).not.toBeInTheDocument()
+    })
+
+    it('still reports an unknown session without traffic', async () => {
+      vi.mocked(api.getSessionTranscript).mockRejectedValue(httpError(404, 'session not found'))
+      renderPage()
+      expect(await screen.findByText('session not found')).toBeInTheDocument()
+    })
   })
 
   it('explains a session that is too large to load', async () => {

@@ -1,4 +1,16 @@
+import type { HTTPInspectorStatus } from '@/types/httpInspector'
 import type { StatusResponse } from '@/types/status'
+
+/** The HTTP Inspector's status while the proxy is off (the default) */
+export function httpInspectorStatusFixture(overrides: Partial<HTTPInspectorStatus> = {}): HTTPInspectorStatus {
+  return {
+    enabled: false, host: '127.0.0.1', port: 0, upstream: 'https://api.anthropic.com', captureMode: 'safe',
+    maxBodyBytes: 33_554_432, queueSize: 1024, retentionDays: 0, storageLimit: 2_147_483_648, activeRuns: 0,
+    exchanges: 0, inFlight: 0, bytesForwarded: 0, bytesStored: 0, sseEvents: 0, droppedRecords: 0,
+    lostBodyBytes: 0, storeErrors: 0, parseErrors: 0, degraded: false, warnings: [],
+    ...overrides,
+  }
+}
 
 type Sections = Pick<StatusResponse, 'server' | 'database' | 'telemetry' | 'settings'>
 
@@ -20,6 +32,7 @@ export function statusFixture(
     startedAt: '2026-11-11T00:00:00Z',
     pricing: [],
     imports: [],
+    httpInspector: httpInspectorStatusFixture(),
     ...rest,
     server: { host: '127.0.0.1', apiPort: 8080, otlpPort: 4318, otlpEnabled: true, otlpGrpcPort: 4317, otlpGrpcEnabled: true, ...server },
     database: {

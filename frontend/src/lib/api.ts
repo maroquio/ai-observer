@@ -21,6 +21,26 @@ import type {
   StatusResponse,
 } from '@/types/status'
 import type { StatsResponse, Provider, ProvidersResponse, ServicesResponse } from '@/types/api.gen'
+import type {
+  HTTPBodyPart,
+  HTTPCaptureRun,
+  HTTPCaptureRunMode,
+  HTTPCaptureRunState,
+  HTTPCaptureRunsResponse,
+  HTTPExchangeBody,
+  HTTPExchangeDetail,
+  HTTPExchangeKind,
+  HTTPExchangeState,
+  HTTPExchangesResponse,
+  HTTPInspectorStatus,
+  HTTPRequestDiffResponse,
+  HTTPRunDetail,
+  HTTPSSEEventsResponse,
+  HTTPSessionTrafficResponse,
+  HTTPToolLinksResponse,
+  HTTPUsageDetail,
+  UpdateHTTPCaptureRunRequest,
+} from '@/types/httpInspector'
 import { TimeoutError, httpError, isAbortError, isHTTPError } from '@/lib/errors'
 import type {
   Dashboard,
@@ -177,6 +197,44 @@ function jsonBody(method: string, body: unknown): RequestInit {
 export interface TimeRange {
   from?: string
   to?: string
+}
+
+// Filters of the HTTP Inspector's exchange lists (a run's or a session's);
+// unset and empty values are not sent
+export interface HTTPExchangeQuery {
+  kind?: HTTPExchangeKind
+  state?: HTTPExchangeState
+  // error (status >= 400 or none), ok, or an HTTP status code
+  status?: string
+  model?: string
+  stream?: boolean
+  tool?: string
+  search?: string
+  minTokens?: number
+  limit?: number
+  cursor?: string
+}
+
+function exchangeQueryString(params: HTTPExchangeQuery): string {
+  return buildQueryString({
+    kind: params.kind || undefined,
+    state: params.state || undefined,
+    status: params.status || undefined,
+    model: params.model || undefined,
+    stream: params.stream === undefined ? undefined : String(params.stream),
+    tool: params.tool || undefined,
+    search: params.search || undefined,
+    minTokens: params.minTokens || undefined,
+    limit: params.limit,
+    cursor: params.cursor,
+  })
+}
+
+const HTTP_INSPECTOR = `${API_BASE}/http-inspector`
+
+/** The download URL of a capture run's sanitized zip (redacted bodies only) */
+export function httpRunExportUrl(runId: string): string {
+  return `${HTTP_INSPECTOR}/runs/${encodeURIComponent(runId)}/export`
 }
 
 function buildQueryString(params: Record<string, string | number | undefined>): string {
@@ -440,6 +498,97 @@ export const api = {
 
   async deleteWidget(dashboardId: string, widgetId: string): Promise<void> {
     await sendRequest(`${API_BASE}/dashboards/${dashboardId}/widgets/${widgetId}`, { method: 'DELETE' })
+  },
+
+  // HTTP Inspector: the capture proxy, its runs and observed exchanges
+  async getHTTPInspectorStatus(options?: FetchOptions): Promise<HTTPInspectorStatus> {
+    return fetchJSON(`${HTTP_INSPECTOR}/status`, options)
+  },
+
+  async getHTTPCaptureRuns(
+    params: { mode?: HTTPCaptureRunMode; state?: HTTPCaptureRunState; limit?: number; cursor?: string } = {},
+    options?: FetchOptions,
+  ): Promise<HTTPCaptureRunsResponse> {
+    const query = buildQueryString({
+      mode: params.mode || undefined,
+      state: params.state || undefined,
+      limit: params.limit,
+      cursor: params.cursor,
+    })
+    return fetchJSON(`${HTTP_INSPECTOR}/runs${query}`, options)
+  },
+
+  async getHTTPCaptureRun(runId: string, options?: FetchOptions): Promise<HTTPRunDetail> {
+    return fetchJSON(`${HTTP_INSPECTOR}/runs/${encodeURIComponent(runId)}`, options)
+  },
+
+  // Renames a run or sets its note (omitted fields stay)
+  async updateHTTPCaptureRun(runId: string, req: UpdateHTTPCaptureRunRequest): Promise<HTTPCaptureRun> {
+    return sendJSON(`${HTTP_INSPECTOR}/runs/${encodeURIComponent(runId)}`, jsonBody('PUT', req))
+  },
+
+  // Deletes a finished run with its stored bodies (409 while it is active)
+  async deleteHTTPCaptureRun(runId: string): Promise<void> {
+    await sendRequest(`${HTTP_INSPECTOR}/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' })
+  },
+
+  // A page of a run's exchanges in arrival order
+  async getHTTPRunExchanges(runId: string, params: HTTPExchangeQuery = {}, options?: FetchOptions): Promise<HTTPExchangesResponse> {
+    return fetchJSON(`${HTTP_INSPECTOR}/runs/${encodeURIComponent(runId)}/exchanges${exchangeQueryString(params)}`, options)
+  },
+
+  // A run's tool uses and the requests that carried their results
+  async getHTTPRunTools(runId: string, options?: FetchOptions): Promise<HTTPToolLinksResponse> {
+    return fetchJSON(`${HTTP_INSPECTOR}/runs/${encodeURIComponent(runId)}/tools`, options)
+  },
+
+  // The API traffic of a session: a page of its exchanges, the summary of
+  // all of them and the comparison with its telemetry. A session without
+  // captures answers an empty response, not 404.
+  async getSessionHTTPExchanges(sessionId: string, params: HTTPExchangeQuery = {}, options?: FetchOptions): Promise<HTTPSessionTrafficResponse> {
+    return fetchJSON(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}/http-exchanges${exchangeQueryString(params)}`, options)
+  },
+
+  async getHTTPExchange(exchangeId: string, options?: FetchOptions): Promise<HTTPExchangeDetail> {
+    return fetchJSON(`${HTTP_INSPECTOR}/exchanges/${encodeURIComponent(exchangeId)}`, options)
+  },
+
+  // One side of an exchange: headers, body (safe or raw) and its interpretation
+  async getHTTPExchangeBody(
+    exchangeId: string,
+    part: HTTPBodyPart,
+    variant: 'safe' | 'raw' = 'safe',
+    options?: FetchOptions,
+  ): Promise<HTTPExchangeBody> {
+    const query = buildQueryString({ variant: variant === 'safe' ? undefined : variant })
+    return fetchJSON(`${HTTP_INSPECTOR}/exchanges/${encodeURIComponent(exchangeId)}/${part}${query}`, options)
+  },
+
+  // A page of a streamed response's events in order; types counts all of them
+  async getHTTPExchangeEvents(
+    exchangeId: string,
+    params: { type?: string; limit?: number; cursor?: string } = {},
+    options?: FetchOptions,
+  ): Promise<HTTPSSEEventsResponse> {
+    const query = buildQueryString({ type: params.type || undefined, limit: params.limit, cursor: params.cursor })
+    return fetchJSON(`${HTTP_INSPECTOR}/exchanges/${encodeURIComponent(exchangeId)}/events${query}`, options)
+  },
+
+  // null when the exchange has no usage (404: no model reply)
+  async getHTTPExchangeUsage(exchangeId: string, options?: FetchOptions): Promise<HTTPUsageDetail | null> {
+    try {
+      return await fetchJSON<HTTPUsageDetail>(`${HTTP_INSPECTOR}/exchanges/${encodeURIComponent(exchangeId)}/usage`, options)
+    } catch (error) {
+      if (isHTTPError(error, 404)) {
+        return null
+      }
+      throw error
+    }
+  },
+
+  // The request compared with the previous one of its conversation
+  async getHTTPExchangeDiff(exchangeId: string, options?: FetchOptions): Promise<HTTPRequestDiffResponse> {
+    return fetchJSON(`${HTTP_INSPECTOR}/exchanges/${encodeURIComponent(exchangeId)}/diff`, options)
   },
 
   // Server status: version, mode, endpoints, database, settings, pricing, imports

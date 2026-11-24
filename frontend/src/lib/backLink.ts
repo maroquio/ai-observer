@@ -7,11 +7,13 @@ const LIST_LABELS: Record<string, string> = {
   sessions: 'Back to sessions',
   logs: 'Back to logs',
   metrics: 'Back to metrics',
+  'http-inspector': 'Back to HTTP Inspector',
 }
 
 const DETAIL_LABELS: Record<string, string> = {
   traces: 'Back to trace',
   sessions: 'Back to session',
+  'http-inspector': 'Back to capture run',
 }
 
 /**

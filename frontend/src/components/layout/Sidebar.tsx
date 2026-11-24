@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { NavLink, matchPath, useLocation } from 'react-router-dom'
-import { GitBranch, BarChart3, FileText, BookOpen, ChevronDown, MessageSquare, Activity, type LucideIcon } from 'lucide-react'
+import { GitBranch, BarChart3, FileText, BookOpen, ChevronDown, MessageSquare, Activity, Network, type LucideIcon } from 'lucide-react'
 import {
   Collapsible,
   CollapsibleContent,
@@ -32,6 +32,7 @@ const insightsItems: NavItem[] = [
   { to: '/logs', icon: FileText, label: 'Logs' },
   { to: '/traces', icon: GitBranch, label: 'Traces' },
   { to: '/sessions', icon: MessageSquare, label: 'Sessions' },
+  { to: '/http-inspector', icon: Network, label: 'HTTP Inspector' },
 ]
 
 const systemItems: NavItem[] = [
