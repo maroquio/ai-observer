@@ -27,6 +27,7 @@ AI coding assistants are becoming essential development tools, but understanding
 - **Single binary** — One ~54MB executable with embedded frontend—no external dependencies
 - **Multi-arch Docker** — Ready-to-run ~97MB images for `linux/amd64` and `linux/arm64`
 - **OTLP-native** — Standard OpenTelemetry Protocol ingestion (HTTP/JSON, HTTP/Protobuf and gRPC)
+- **HTTP Inspector** — Optional local proxy that shows Claude Code's Anthropic API traffic as it went over the wire: requests, responses, system prompt, tools, every SSE event, `count_tokens`, cache and the `tool_use → tool_result` flow ([details](#http-inspector-anthropic-api-traffic))
 
 ## Documentation
 
@@ -37,6 +38,7 @@ AI coding assistants are becoming essential development tools, but understanding
 - [Watch Command](#watch-command) — Watch local session files and import incrementally in real-time
 - [Agent Access (MCP)](docs/mcp.md) — Let Claude Code, Codex, Gemini CLI, Copilot or OpenCode search your conversations, logs, traces, metrics and costs
 - [Redaction](docs/redaction.md) — Secrets (and optionally personal data) are replaced before telemetry is stored
+- [HTTP Inspector](docs/http-inspector/QUICKSTART.md) — Capture and inspect Claude Code's Anthropic API traffic (Portuguese: quick start, architecture, security, teaching demo)
 - [Pricing System](docs/pricing.md) — Cost calculation for Claude, Codex/OpenAI, Gemini, and GitHub Copilot models; OpenCode costs are ingested from the OTEL plugin
 
 ## Screenshots
@@ -56,6 +58,29 @@ AI coding assistants are becoming essential development tools, but understanding
 ### Traces View
 
 ![AI Observer traces](docs/images/traces.png)
+
+## HTTP Inspector (Anthropic API traffic)
+
+OTLP reports what Claude Code *says* about its API calls; session files record its messages. Neither carries the HTTP payloads. The HTTP Inspector adds a third, separate source: a local reverse proxy for `ANTHROPIC_BASE_URL` that forwards requests unchanged to `https://api.anthropic.com` and records each exchange.
+
+```bash
+ai-observer serve --http-proxy          # proxy off by default; 127.0.0.1:8787
+ai-observer run -- claude               # a capture run with a port of its own; login passes through unchanged
+# or: export ANTHROPIC_BASE_URL=http://127.0.0.1:8787 && claude
+```
+
+What you get, on each session's **API traffic** tab and the **HTTP Inspector** page:
+
+- every exchange in order — inference, `count_tokens` (kept apart from inference usage), errors, retries and other endpoints — with a deterministic one-line description;
+- an inspector per exchange: **Summary**, **Request** (`system`, `tools`, `messages`, parameters, cache breakpoints, sanitized headers), **Response** (text, tool uses, thinking only when transmitted, errors), **SSE Stream** (each event with its arrival time), **Tokens & Cache** (cumulative usage, cache reads and 5-minute/1-hour writes, API-equivalent cost from the price catalog) and **Context Diff** (what changed since the previous request of the conversation);
+- `tool_use → tool_result` links between exchanges (the tool's local execution itself is not visible to the proxy);
+- live updates, deep links (`/sessions/{id}/http-exchanges/{exchangeId}`), sanitized zip export, retention.
+
+Safety: the upstream is fixed and validated (no open proxy), the proxy listens on loopback, browser requests are refused, credential headers are **never** stored, and bodies are stored redacted (`AI_OBSERVER_HTTP_CAPTURE_MODE=safe`; `metadata_only` stores none, `full_raw` adds an unredacted local copy). Captured data lives in tables of its own and never adds to OTLP or session file totals. Not verified: claude.ai subscription (OAuth) logins through the proxy.
+
+Try it without an API key or cost against the simulated upstream (`make fake-anthropic`), as described in the [teaching demo](docs/http-inspector/TEACHING_DEMO.md). Documentation (Portuguese): [quick start](docs/http-inspector/QUICKSTART.md), [architecture](docs/http-inspector/ARCHITECTURE.md), [data model](docs/http-inspector/DATA_MODEL.md), [protocol](docs/http-inspector/PROTOCOL.md), [security](docs/http-inspector/SECURITY.md), [troubleshooting](docs/http-inspector/TROUBLESHOOTING.md), [testing](docs/http-inspector/TESTING.md).
+
+<!-- HTTP-INSPECTOR-SCREENSHOTS -->
 
 ## Quick Start
 
@@ -153,6 +178,17 @@ make all     # Build single binary with embedded frontend
 | `AI_OBSERVER_CODEX_PATH` | `$CODEX_HOME/sessions` or `~/.codex/sessions` | Codex session directory to import and watch |
 | `AI_OBSERVER_GEMINI_PATH` | `$GEMINI_HOME/tmp` or `~/.gemini/tmp` | Gemini CLI directory to import and watch |
 | `AI_OBSERVER_PRICING_DIR` | _(empty)_ | Directory with pricing files that add models or replace built-in prices, such as the current prices written by `pricing update` (see [Pricing](docs/pricing.md#overriding-prices)) |
+| `AI_OBSERVER_HTTP_PROXY_ENABLED` | `false` | Run the [HTTP Inspector](#http-inspector-anthropic-api-traffic) proxy with `serve` and `watch` (`--http-proxy`) |
+| `AI_OBSERVER_HTTP_PROXY_HOST` | `127.0.0.1` | Interface the proxy listens on; another one also needs `AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE=true` |
+| `AI_OBSERVER_HTTP_PROXY_PORT` | `8787` | Shared proxy port for `ANTHROPIC_BASE_URL`, or `off` for `ai-observer run` only (`--http-proxy-port`) |
+| `AI_OBSERVER_HTTP_PROXY_UPSTREAM` | `https://api.anthropic.com` | Fixed destination: https, or http to loopback (tests, simulated upstream) |
+| `AI_OBSERVER_HTTP_CAPTURE_MODE` | `safe` | `safe` (redacted bodies), `metadata_only` (no bodies) or `full_raw` (also unredacted bodies); credential headers are never stored |
+| `AI_OBSERVER_HTTP_CAPTURE_DIR` | `http-captures` next to the database | Where captured bodies are stored |
+| `AI_OBSERVER_HTTP_CAPTURE_MAX_BODY_BYTES` | `32MB` | Largest body stored; larger ones are forwarded whole and stored cut |
+| `AI_OBSERVER_HTTP_CAPTURE_QUEUE_SIZE` | `1024` | Capture records waiting to be stored; more are dropped and counted, never delaying traffic |
+| `AI_OBSERVER_HTTP_CAPTURE_RETENTION_DAYS` | `AI_OBSERVER_RETENTION_DAYS` | Delete capture runs older than this many days (`0` keeps them) |
+| `AI_OBSERVER_HTTP_CAPTURE_STORAGE_LIMIT` | `2GB` | Delete the oldest finished capture runs while stored bodies exceed this size (`off` disables) |
+| `AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE` | `false` | Let the proxy listen beyond loopback |
 
 CORS allows `AI_OBSERVER_FRONTEND_URL` plus `http://localhost:5173` and `http://localhost:8080`; set `AI_OBSERVER_FRONTEND_URL` when serving a custom UI origin. Browser requests and WebSocket connections are accepted from loopback origins, those CORS origins, origins whose host is in `AI_OBSERVER_ALLOWED_HOSTS`, and the dashboard's own origin when it is an IP address.
 
@@ -217,6 +253,7 @@ ai-observer [command] [options]
 | `compact` | Rewrite the database into a new file without its free space |
 | `setup` | Show setup instructions for AI tools |
 | `pricing update` | Fetch current model prices from [models.dev](https://models.dev) into `AI_OBSERVER_PRICING_DIR` (see [Pricing](docs/pricing.md#updating-pricing)) |
+| `run` | Run a program such as Claude Code with its Anthropic API traffic captured by the [HTTP Inspector](#http-inspector-anthropic-api-traffic) (`ai-observer run -- claude`) |
 | `healthcheck` | Exit 0 when the server on this machine is ready (`/ready`; the Docker image's health check) |
 
 `ai-observer <command> --help` shows a command's options.
@@ -906,6 +943,28 @@ Logs, spans and traces carry the `sessionId` of their session (a trace when all 
 **Monitoring AI Observer itself.** `GET /metrics` serves AI Observer's own metrics for Prometheus: OTLP requests by transport (`http`, `grpc`) and result, records stored, rejected and deduplicated, noise spans dropped, write transaction durations and lock waits, API request durations and timeouts by route, WebSocket clients, watcher files and errors, retention deletions and failed authentication. With `AI_OBSERVER_AUTH_TOKEN`, scrape with `Authorization: Bearer <token>`.
 
 </details>
+
+### HTTP Inspector API (Port 8080)
+
+All parameters and response types are in [docs/openapi.json](docs/openapi.json).
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/http-inspector/status` | GET | Proxy state, settings and counters (never credentials) |
+| `/api/http-inspector/runs` | GET, POST | Capture runs; `POST` creates a launcher run with a port of its own (`409` when the proxy is off) |
+| `/api/http-inspector/runs/{runId}` | GET, PUT, DELETE | A run; rename/note; delete with its bodies (`409` while active) |
+| `/api/http-inspector/runs/{runId}/finish` | POST | End a launcher run (exit code, PID) |
+| `/api/http-inspector/runs/{runId}/exchanges` | GET | Exchanges in order, with filters (`kind`, `status`, `model`, `search`, …) and `cursor` |
+| `/api/http-inspector/runs/{runId}/tools` | GET | `tool_use → tool_result` links |
+| `/api/http-inspector/runs/{runId}/export` | GET | Sanitized zip (never unredacted bodies) |
+| `/api/http-inspector/exchanges/{id}` | GET | Exchange detail, lifecycle, observations |
+| `/api/http-inspector/exchanges/{id}/request`, `/response` | GET | Bodies (`variant=safe` or `raw` with `full_raw`), sanitized headers, parsed request/message |
+| `/api/http-inspector/exchanges/{id}/events` | GET | SSE events with arrival offsets (`type` filter, paging) |
+| `/api/http-inspector/exchanges/{id}/usage` | GET | Usage, cumulative snapshots, cost components |
+| `/api/http-inspector/exchanges/{id}/diff` | GET | Context Diff against the previous request of the conversation |
+| `/api/sessions/{sessionId}/http-exchanges` | GET | A session's captured traffic, runs, summary, and the comparison with its telemetry (not added up) |
+
+WebSocket clients receive `{"type":"http_exchanges"}` notifications when exchanges are stored.
 
 ## Data Collected
 
