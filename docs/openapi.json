@@ -1499,7 +1499,7 @@
             "type": "number"
           },
           "telemetryInputTokens": {
-            "description": "Telemetry usage of the session (OTLP or session file, deduplicated\nby AI Observer's existing rules); nil when unknown",
+            "description": "Telemetry usage of the session (OTLP or session file, deduplicated\nby AI Observer's existing rules, as the transcript totals it), input\ncounted like ProxyInputTokens (uncached + cache read + cache write);\nnil when unknown",
             "format": "int64",
             "type": "integer"
           },

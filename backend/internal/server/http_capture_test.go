@@ -338,6 +338,12 @@ func TestHTTPInspectorEndToEnd(t *testing.T) {
 		session.Comparison.MatchedRequests != 1 || session.Comparison.Certainty != "partial" {
 		t.Fatalf("session traffic %+v", session.Comparison)
 	}
+	// The telemetry side is the session's own usage, shown beside the
+	// proxy's and not added to it
+	if cmp := session.Comparison; cmp.TelemetryInputTokens == nil || *cmp.TelemetryInputTokens != 10 ||
+		cmp.TelemetryOutputTokens == nil || *cmp.TelemetryOutputTokens != 5 || cmp.ProxyInputTokens <= 10 {
+		t.Fatalf("comparison usage %+v", cmp)
+	}
 	c.get("/api/sessions/unknown/http-exchanges", "HTTPSessionTrafficResponse")
 	// The session list counts the session's captured exchanges
 	listed := decode[api.SessionsResponse](t, c.get("/api/sessions?service=claude-code", "SessionsResponse"))

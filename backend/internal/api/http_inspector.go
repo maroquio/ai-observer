@@ -482,7 +482,9 @@ type HTTPSourceComparison struct {
 	// Observer (otlp/local_jsonl, unchanged by the proxy)
 	Selected string `json:"selected"`
 	// Telemetry usage of the session (OTLP or session file, deduplicated
-	// by AI Observer's existing rules); nil when unknown
+	// by AI Observer's existing rules, as the transcript totals it), input
+	// counted like ProxyInputTokens (uncached + cache read + cache write);
+	// nil when unknown
 	TelemetryInputTokens  *int64   `json:"telemetryInputTokens,omitempty"`
 	TelemetryOutputTokens *int64   `json:"telemetryOutputTokens,omitempty"`
 	TelemetryCostUSD      *float64 `json:"telemetryCostUsd,omitempty"`

@@ -117,6 +117,9 @@ func New(cfg *config.Config) (*Server, error) {
 		store.Close()
 		return nil, err
 	}
+	if s.httpInspector != nil {
+		s.httpInspector.SetTranscripts(s.transcripts.Load)
+	}
 
 	h := handlers.New(store, hub)
 	s.ingest = h

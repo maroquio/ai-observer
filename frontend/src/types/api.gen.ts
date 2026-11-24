@@ -1908,7 +1908,9 @@ export interface HTTPSourceComparison {
   selected: string
   /**
    * Telemetry usage of the session (OTLP or session file, deduplicated
-   * by AI Observer's existing rules); nil when unknown
+   * by AI Observer's existing rules, as the transcript totals it), input
+   * counted like ProxyInputTokens (uncached + cache read + cache write);
+   * nil when unknown
    */
   telemetryInputTokens?: number
   telemetryOutputTokens?: number

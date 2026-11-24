@@ -62,6 +62,15 @@ type HTTPInspector struct {
 	blobs *httpcapture.BlobStore
 	// off describes the proxy while it is off
 	off api.HTTPInspectorStatus
+	// transcripts loads a session's transcript (the server's shared
+	// cache); nil leaves the telemetry side of comparisons unknown
+	transcripts func(ctx context.Context, sessionID string) (*api.TranscriptResponse, error)
+}
+
+// SetTranscripts lets comparisons show a session's telemetry usage as its
+// transcript totals it, by AI Observer's own deduplication rules
+func (h *HTTPInspector) SetTranscripts(load func(ctx context.Context, sessionID string) (*api.TranscriptResponse, error)) {
+	h.transcripts = load
 }
 
 // NewHTTPInspector returns the HTTP Inspector handlers. proxy and blobs may
@@ -394,6 +403,7 @@ func (h *HTTPInspector) comparison(ctx context.Context, sid string, sum *api.HTT
 			c.MatchedRequests++
 		}
 	}
+	h.telemetryUsage(ctx, sid, c)
 	switch {
 	case len(telemetry) == 0:
 		c.Certainty = "none"
@@ -409,6 +419,30 @@ func (h *HTTPInspector) comparison(ctx context.Context, sid string, sum *api.HTT
 		c.Note = "Nenhum request_id capturado aparece na telemetria da sessão: as fontes não puderam ser casadas. Nada é somado."
 	}
 	return c, nil
+}
+
+// telemetryUsage fills the telemetry side of a comparison from the
+// session's transcript totals, with input counted like the proxy's
+// (uncached + cache read + cache write). A session without telemetry
+// usage, or whose transcript cannot be loaded, stays unknown.
+func (h *HTTPInspector) telemetryUsage(ctx context.Context, sid string, c *api.HTTPSourceComparison) {
+	if h.transcripts == nil {
+		return
+	}
+	t, err := h.transcripts(ctx, sid)
+	if err != nil || t == nil || t.Totals == nil {
+		return
+	}
+	in := t.Totals.InputTokens + t.Totals.CacheRead + t.Totals.CacheWrite
+	out := t.Totals.OutputTokens
+	if in == 0 && out == 0 {
+		return
+	}
+	c.TelemetryInputTokens, c.TelemetryOutputTokens = &in, &out
+	if t.Totals.CostUSD > 0 {
+		cost := t.Totals.CostUSD
+		c.TelemetryCostUSD = &cost
+	}
 }
 
 // exchangeOr404 loads an exchange
