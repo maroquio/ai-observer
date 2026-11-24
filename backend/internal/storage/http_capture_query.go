@@ -894,35 +894,19 @@ func (s *DuckDBStore) fillSessionHTTPExchanges(ctx context.Context, sessions []a
 		return nil
 	}
 	seen := make(map[string]bool, len(sessions))
-	var marks []string
-	var args []any
+	ids := make([]string, 0, len(sessions))
 	for _, session := range sessions {
 		if !seen[session.SessionID] {
 			seen[session.SessionID] = true
-			marks = append(marks, "?")
-			args = append(args, session.SessionID)
+			ids = append(ids, session.SessionID)
 		}
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT session_id, COUNT(*) FROM http_capture_exchanges
-		WHERE session_id IN (`+strings.Join(marks, ", ")+`) GROUP BY session_id`, args...)
+	counts, err := s.HTTPExchangeCountsBySession(ctx, ids)
 	if err != nil {
 		return fmt.Errorf("counting sessions' captured exchanges: %w", err)
 	}
-	defer rows.Close()
-	counts := make(map[string]int, len(marks))
-	for rows.Next() {
-		var id string
-		var n int
-		if err := rows.Scan(&id, &n); err != nil {
-			return fmt.Errorf("scanning captured exchange count: %w", err)
-		}
-		counts[id] = n
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
 	for i := range sessions {
-		sessions[i].HTTPExchanges = counts[sessions[i].SessionID]
+		sessions[i].HTTPExchanges = int(counts[sessions[i].SessionID])
 	}
 	return nil
 }

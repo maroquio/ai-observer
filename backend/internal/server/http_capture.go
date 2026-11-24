@@ -174,6 +174,13 @@ func (s *Server) httpInspectorStatus() api.HTTPInspectorStatus {
 // retention, then the oldest finished runs while the stored bodies exceed
 // the capture storage limit
 func (s *Server) applyHTTPCaptureRetention(ctx context.Context, now time.Time) {
+	deletedRuns := 0
+	// Deleted rows free blocks for reuse only after a checkpoint
+	defer func() {
+		if deletedRuns > 0 {
+			s.checkpointAfterDeletion(ctx)
+		}
+	}()
 	if days := s.config.HTTPCaptureRetentionDays(); days > 0 {
 		ids, err := s.storage.HTTPCaptureRunsEndedBefore(ctx, now.AddDate(0, 0, -days))
 		if err != nil {
@@ -186,6 +193,7 @@ func (s *Server) applyHTTPCaptureRetention(ctx context.Context, now time.Time) {
 			if !s.deleteCaptureRun(ctx, id) {
 				return
 			}
+			deletedRuns++
 		}
 		if len(ids) > 0 {
 			logger.Info("Deleted expired HTTP capture runs", "runs", len(ids), "days", days)
@@ -213,6 +221,7 @@ func (s *Server) applyHTTPCaptureRetention(ctx context.Context, now time.Time) {
 		}
 		size -= r.Bytes
 		deleted++
+		deletedRuns++
 	}
 	if deleted > 0 {
 		logger.Info("Deleted the oldest HTTP capture runs above the capture storage limit",

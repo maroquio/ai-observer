@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/tobilg/ai-observer/internal/apigen"
 	"github.com/tobilg/ai-observer/internal/apigen/spec"
 	"github.com/tobilg/ai-observer/internal/config"
+	"github.com/tobilg/ai-observer/internal/httpcapture"
 	"github.com/tobilg/ai-observer/internal/storage"
 )
 
@@ -464,5 +466,95 @@ func TestHTTPInspectorRejectsInvalidUpstream(t *testing.T) {
 			shutdown(t, s)
 			t.Errorf("%s accepted", u)
 		}
+	}
+}
+
+// Capture retention deletes finished runs older than the retention, then
+// the oldest finished runs while the stored bodies exceed the storage
+// limit; active runs and newer runs stay (D24)
+func TestHTTPCaptureRetention(t *testing.T) {
+	fake := &fakeAnthropic{}
+	up := httptest.NewServer(fake)
+	defer up.Close()
+	cfg := captureConfig(t, up.URL, true)
+	cfg.HTTPProxy.RetentionDays = 7
+	cfg.HTTPProxy.StorageLimit = 0
+	s, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shutdown(t, s)
+	ctx := context.Background()
+	now := time.Now()
+
+	addRun := func(id string, started time.Time, ended *time.Time) {
+		t.Helper()
+		if err := s.storage.InsertHTTPCaptureRun(ctx, storage.HTTPCaptureRunRecord{ID: id, Name: id, Mode: api.CaptureRunLauncher,
+			State: api.CaptureRunActive, CaptureMode: config.CaptureSafe, StartedAt: started}); err != nil {
+			t.Fatal(err)
+		}
+		if ended != nil {
+			if err := s.storage.FinishHTTPCaptureRun(ctx, id, api.CaptureRunFinished, *ended, nil, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	at := func(days int) *time.Time { v := now.AddDate(0, 0, -days); return &v }
+	oldRun, recentRun, activeRun := httpcapture.NewID(), httpcapture.NewID(), httpcapture.NewID()
+	addRun(oldRun, *at(10), at(9))
+	addRun(recentRun, *at(2), at(2))
+	addRun(activeRun, *at(30), nil)
+	rel, err := httpcapture.BodyPath(oldRun, httpcapture.NewID(), "request", "safe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.captureBlobs.WriteFile(rel, []byte(`{"x":1}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	s.applyHTTPCaptureRetention(ctx, now)
+	exists := func(id string) bool {
+		_, err := s.storage.HTTPCaptureRun(ctx, id)
+		if err != nil && !errors.Is(err, storage.ErrCaptureNotFound) {
+			t.Fatal(err)
+		}
+		return err == nil
+	}
+	if exists(oldRun) || !exists(recentRun) || !exists(activeRun) {
+		t.Fatalf("after retention: old %v, recent %v, active %v", exists(oldRun), exists(recentRun), exists(activeRun))
+	}
+	if _, err := os.Stat(filepath.Join(cfg.HTTPCaptureDir(), "runs", oldRun)); !os.IsNotExist(err) {
+		t.Fatalf("bodies of the expired run kept: %v", err)
+	}
+
+	// Two launcher runs with bodies; a limit just under their size deletes
+	// the oldest finished runs first
+	capture := func() string {
+		t.Helper()
+		run, proxyURL, err := s.httpProxy.StartLauncherRun(ctx, httpcapture.RunOptions{Name: "limite"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sendThroughProxy(t, proxyURL, "/v1/messages", e2eBody(false, `{"role":"user","content":"oi"}`))
+		waitExchanges(t, s, run.ID, 1)
+		if err := s.httpProxy.FinishRun(ctx, run.ID, nil, 0); err != nil {
+			t.Fatal(err)
+		}
+		return run.ID
+	}
+	first := capture()
+	time.Sleep(5 * time.Millisecond)
+	second := capture()
+	size, err := s.captureBlobs.Size()
+	if err != nil || size == 0 {
+		t.Fatalf("stored bodies %d, %v", size, err)
+	}
+	s.config.HTTPProxy.StorageLimit = size - 1
+	s.applyHTTPCaptureRetention(ctx, now)
+	if exists(first) || !exists(second) || !exists(activeRun) {
+		t.Fatalf("after the storage limit: first %v, second %v, active %v", exists(first), exists(second), exists(activeRun))
+	}
+	if after, _ := s.captureBlobs.Size(); after > size-1 {
+		t.Fatalf("stored bodies %d, limit %d", after, size-1)
 	}
 }
