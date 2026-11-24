@@ -1598,7 +1598,9 @@ export interface WireMessagesSummary {
   bytes: number
   /**
    * hashes are the SHA-256 (hex, first 16 characters) of each message's
-   * JSON bytes as sent, in order, for prefix comparison (DiffRequests)
+   * JSON bytes as sent without its cache_control members, in order, for
+   * prefix comparison (DiffRequests): clients move the cache breakpoint
+   * to the newest message, which must not make older messages differ
    */
   hashes: string[] | null
   /** sizes are the JSON bytes of each message */

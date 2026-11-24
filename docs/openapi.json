@@ -4046,7 +4046,7 @@
             "type": "integer"
           },
           "hashes": {
-            "description": "Hashes are the SHA-256 (hex, first 16 characters) of each message's\nJSON bytes as sent, in order, for prefix comparison (DiffRequests)",
+            "description": "Hashes are the SHA-256 (hex, first 16 characters) of each message's\nJSON bytes as sent without its cache_control members, in order, for\nprefix comparison (DiffRequests): clients move the cache breakpoint\nto the newest message, which must not make older messages differ",
             "items": {
               "type": "string"
             },
