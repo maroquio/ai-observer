@@ -378,7 +378,9 @@ type HTTPCostComponent struct {
 	// cache_write_unknown
 	Component string `json:"component"`
 	Tokens    int64  `json:"tokens"`
-	// PricePerMTok is the catalog price per million tokens; nil: no price
+	// PricePerMTok is the price per million tokens: the catalog's, or
+	// derived from it (cache_write_1h: twice the input price, see Note);
+	// nil: no price
 	PricePerMTok *float64 `json:"pricePerMTok,omitempty"`
 	CostUSD      *float64 `json:"costUsd,omitempty"`
 	Note         string   `json:"note,omitempty"`

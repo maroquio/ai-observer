@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -167,6 +169,42 @@ func (e *Exchange) decodeBody(part int, st partState, encoding string) decoded {
 	return d
 }
 
+// parseEncodedStream decodes a compressed event stream and parses its
+// events, each stamped with the arrival of the chunk it was decoded from;
+// decoded output stops at the body limit. It returns the decoding error,
+// if any (the events before it are kept).
+func (e *Exchange) parseEncodedStream(data []byte, encoding string, end time.Time) error {
+	e.sse = anthropicwire.NewSSEParser(0)
+	e.recon = anthropicwire.NewReconstructor()
+	tr := &timedReader{data: data, marks: e.respMarks, at: end}
+	dec, release, err := anthropicwire.NewStreamDecoder(tr, encoding)
+	if err != nil {
+		return err
+	}
+	defer release()
+	limit := e.c.cfg.MaxBodyBytes
+	if limit <= 0 {
+		limit = anthropicwire.DefaultMaxDecodedBytes
+	}
+	buf := make([]byte, 32<<10)
+	for decoded := int64(0); decoded < limit; {
+		n, err := dec.Read(buf[:min(int64(len(buf)), limit-decoded)])
+		if n > 0 {
+			decoded += int64(n)
+			for _, ev := range e.sse.Feed(buf[:n]) {
+				e.addEvent(ev, tr.at)
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // build interprets the exchange
 func (e *Exchange) build(_ context.Context, snap snapshot) *storage.HTTPExchangeFinish {
 	c := e.c
@@ -219,16 +257,12 @@ func (e *Exchange) build(_ context.Context, snap snapshot) *storage.HTTPExchange
 	stream := isEventStream(snap.respContentType)
 	if stream {
 		ex.Stream = true
-		if e.sseMode == 2 && resp.decodeErr == nil {
-			// encoded stream: events parsed after decoding, at the time the
-			// response ended
-			e.sse = anthropicwire.NewSSEParser(0)
-			e.recon = anthropicwire.NewReconstructor()
-			for _, ev := range e.sse.Feed(resp.data) {
-				e.addEvent(ev, end)
+		if e.sseMode == sseEncoded {
+			if err := e.parseEncodedStream(resp.kept, snap.respContentEnc, end); err != nil && !resp.truncated {
+				degraded = append(degraded, "stream comprimido ("+snap.respContentEnc+") não decodificado por inteiro: "+truncateText(err.Error(), 200))
+				lifecycle = append(lifecycle, api.HTTPLifecycleEvent{Event: EventStreamParseError, At: time.Now().UTC(),
+					Detail: "stream comprimido (" + snap.respContentEnc + "): " + truncateText(err.Error(), 200)})
 			}
-			lifecycle = append(lifecycle, api.HTTPLifecycleEvent{Event: EventStreamParseError, At: time.Now().UTC(),
-				Detail: "stream comprimido (" + snap.respContentEnc + "): eventos interpretados ao final, sem tempos individuais"})
 		}
 		if e.sse != nil {
 			if ev := e.sse.Finish(); ev != nil {
@@ -466,6 +500,11 @@ func (e *Exchange) usage(msg *anthropicwire.Message, countTokens *int64, model, 
 	return d
 }
 
+// cacheWrite1hInputMultiplier is the price of a 1-hour cache write token
+// relative to an input token of the same model and context tier
+// (Anthropic's prompt caching pricing; docs/http-inspector/adr/ADR-006)
+const cacheWrite1hInputMultiplier = 2
+
 // priceUsage estimates the API-equivalent cost of d's usage from the price
 // catalog. Nothing is priced at 0 for lack of a price: unpriced parts make
 // the status partial (or unavailable) with the reason.
@@ -514,7 +553,11 @@ func priceUsage(d *api.HTTPUsageDetail, model string) {
 		add("cache_write_5m", write5m, &p.CacheWriteCostPerToken, "")
 	}
 	if write1h > 0 {
-		add("cache_write_1h", write1h, nil, "o catálogo de preços não tem o preço de escrita de cache com TTL de 1 hora")
+		// The catalog (models.dev) has no 1-hour write price; Anthropic prices
+		// 1-hour cache writes at twice the base input price (5-minute ones at
+		// 1.25x), the rule Claude Code's own cost metric follows
+		write1hPrice := cacheWrite1hInputMultiplier * p.InputCostPerToken
+		add("cache_write_1h", write1h, &write1hPrice, "derivado: 2 × o preço de input do catálogo (regra de preços da Anthropic para escrita de cache de 1 hora)")
 	}
 	if unknown := val(d.Totals.CacheWriteUnknown); unknown > 0 {
 		add("cache_write_unknown", unknown, &p.CacheWriteCostPerToken, "TTL não informado: estimado com o preço de escrita de cache do catálogo (5 minutos)")

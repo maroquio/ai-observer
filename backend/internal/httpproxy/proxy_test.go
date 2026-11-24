@@ -473,6 +473,149 @@ func TestStreamErrorEventAndGzip(t *testing.T) {
 	}
 }
 
+// gzipStream answers with streamEvents compressed with gzip, flushed event
+// by event with a pause after each (the real API compresses Claude Code's
+// streams: it sends Accept-Encoding gzip). With split the fourth event is
+// sent in two chunks; with cut the connection closes after five events.
+func gzipStream(gap time.Duration, split, cut bool) func(http.ResponseWriter, *http.Request, []byte) bool {
+	return func(w http.ResponseWriter, r *http.Request, _ []byte) bool {
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Request-Id", "req_gzip_stream")
+		w.WriteHeader(http.StatusOK)
+		fl := w.(http.Flusher)
+		gz := gzip.NewWriter(w)
+		send := func(s string) {
+			io.WriteString(gz, s)
+			gz.Flush()
+			fl.Flush()
+			time.Sleep(gap)
+		}
+		for i, ev := range streamEvents("msg_gz", "toolu_gz") {
+			if cut && i == 5 {
+				if conn, _, err := http.NewResponseController(w).Hijack(); err == nil {
+					conn.Close()
+				}
+				return true
+			}
+			if split && i == 3 {
+				send(ev[:len(ev)/2])
+				ev = ev[len(ev)/2:]
+			}
+			send(ev)
+		}
+		gz.Close()
+		return true
+	}
+}
+
+func gzipRequest(t *testing.T, proxyURL string) *http.Response {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, proxyURL+"/v1/messages?beta=true", strings.NewReader(requestBody("s-gz", true)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+// A compressed event stream reaches the client as the upstream sent it, and
+// every event still gets the arrival time of the chunk that carried it
+func TestCompressedStreamEventTimes(t *testing.T) {
+	const gap = 30 * time.Millisecond
+	h := newHarness(t, httpcapture.ModeSafe)
+	h.up.handler = gzipStream(gap, true, false)
+	resp := gzipRequest(t, h.proxyURL)
+	raw, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("encoding %q", resp.Header.Get("Content-Encoding"))
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := io.ReadAll(zr)
+	if err != nil || string(plain) != strings.Join(streamEvents("msg_gz", "toolu_gz"), "") {
+		t.Fatalf("client stream changed: %v", err)
+	}
+	h.flush()
+
+	ex := h.exchanges()
+	if len(ex) != 1 {
+		t.Fatalf("%d exchanges", len(ex))
+	}
+	e := ex[0]
+	if e.State != api.ExchangeComplete || !e.Stream || e.Degraded || e.StopReason != "tool_use" || e.SSEEvents != 11 {
+		t.Fatalf("exchange %+v", e)
+	}
+	if e.Usage == nil || e.Usage.Quality != api.UsageFinal || *e.Usage.Usage.OutputTokens != 42 {
+		t.Fatalf("usage %+v", e.Usage)
+	}
+	events, err := h.store.HTTPSSEEvents(context.Background(), e.ID, "", storage.Page{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events.Events) != 11 {
+		t.Fatalf("%d events", len(events.Events))
+	}
+	// a pause after every chunk: the offsets follow the chunks (in order,
+	// mostly distinct, spread over the pauses), never all equal as when the
+	// stream was parsed after its end. Loose bounds: a stalled scheduler
+	// may join two chunks.
+	distinct := map[float64]bool{}
+	for i, ev := range events.Events {
+		distinct[ev.OffsetMs] = true
+		if i > 0 && ev.OffsetMs < events.Events[i-1].OffsetMs {
+			t.Fatalf("event %d before event %d: %+v", i, i-1, events.Events)
+		}
+	}
+	span := events.Events[10].OffsetMs - events.Events[0].OffsetMs
+	if len(distinct) < 6 || span < float64(5*gap.Milliseconds()) {
+		t.Fatalf("%d distinct offsets over %.1f ms: %+v", len(distinct), span, events.Events)
+	}
+	stored, err := h.store.HTTPExchange(context.Background(), e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range stored.Record.Lifecycle {
+		if l.Event == httpcapture.EventStreamParseError {
+			t.Fatalf("lifecycle %+v", l)
+		}
+	}
+}
+
+// A compressed stream cut by the upstream keeps the events decoded before
+// the cut, with their times, and says the stream was not decoded whole
+func TestCompressedStreamCut(t *testing.T) {
+	h := newHarness(t, httpcapture.ModeSafe)
+	h.up.handler = gzipStream(10*time.Millisecond, false, true)
+	resp := gzipRequest(t, h.proxyURL)
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	h.flush()
+	ex := h.exchanges()
+	if len(ex) != 1 || ex[0].State != api.ExchangePartial || !ex[0].Degraded || ex[0].SSEEvents != 5 {
+		t.Fatalf("%+v", ex)
+	}
+	stored, err := h.store.HTTPExchange(context.Background(), ex[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(stored.Record.DegradedReasons, " | "), "stream comprimido (gzip) não decodificado por inteiro") {
+		t.Fatalf("reasons %v", stored.Record.DegradedReasons)
+	}
+	events, err := h.store.HTTPSSEEvents(context.Background(), ex[0].ID, "", storage.Page{Limit: 100})
+	if err != nil || len(events.Events) != 5 || events.Events[4].OffsetMs <= events.Events[0].OffsetMs {
+		t.Fatalf("events %+v %v", events, err)
+	}
+}
+
 func TestUpstreamUnreachable(t *testing.T) {
 	dir := t.TempDir()
 	store, err := storage.NewDuckDBStore(filepath.Join(dir, "t.duckdb"))

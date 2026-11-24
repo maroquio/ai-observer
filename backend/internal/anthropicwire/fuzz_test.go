@@ -1,7 +1,9 @@
 package anthropicwire
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"math/rand/v2"
 	"os"
 	"reflect"
@@ -123,6 +125,37 @@ func FuzzDecodeBody(f *testing.F) {
 		}
 		if status != DecodeIdentity && len(out) > 4096 {
 			t.Fatalf("%d bytes over the limit", len(out))
+		}
+	})
+}
+
+// FuzzStreamDecoder: any input and header, read in small chunks and bounded
+// by the caller, never panics and decodes as DecodeBody does
+func FuzzStreamDecoder(f *testing.F) {
+	f.Add(encode(f, "gzip", decodeSample), "gzip")
+	f.Add(encode(f, "zlib", decodeSample), "deflate")
+	f.Add(encode(f, "br", decodeSample), "br")
+	f.Add(encode(f, "zstd", decodeSample), "zstd")
+	f.Add([]byte("plain"), "identity")
+	f.Fuzz(func(t *testing.T, body []byte, header string) {
+		var chunks [][]byte
+		for rest := body; len(rest) > 0; {
+			n := min(len(rest), 7)
+			chunks = append(chunks, rest[:n])
+			rest = rest[n:]
+		}
+		dec, release, err := NewStreamDecoder(&chunkReader{chunks: chunks}, header)
+		if err != nil {
+			return
+		}
+		defer release()
+		out, rerr := io.ReadAll(io.LimitReader(dec, 4096))
+		if rerr != nil {
+			return
+		}
+		want, status, werr := DecodeBody(body, header, 4096)
+		if werr == nil && status == DecodeDecoded && !bytes.Equal(out, want) {
+			t.Fatalf("stream decoded %d bytes, DecodeBody %d", len(out), len(want))
 		}
 	})
 }

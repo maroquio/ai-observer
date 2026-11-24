@@ -1795,7 +1795,11 @@ export interface HTTPCostComponent {
    */
   component: string
   tokens: number
-  /** pricePerMTok is the catalog price per million tokens; nil: no price */
+  /**
+   * pricePerMTok is the price per million tokens: the catalog's, or
+   * derived from it (cache_write_1h: twice the input price, see Note);
+   * nil: no price
+   */
   pricePerMTok?: number
   costUsd?: number
   note?: string

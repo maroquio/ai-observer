@@ -116,7 +116,24 @@ type Exchange struct {
 	events    []api.HTTPSSEEvent
 	eventsCut int
 	firstEvt  time.Time
-	sseMode   int // 0 unknown, 1 parse incrementally, 2 not SSE / parse at end
+	sseMode   int // how the response is read: sseUnknown, sseIncremental, sseNone, sseEncoded
+	// respMarks: where each response chunk ended in the body and when it
+	// arrived (compressed event streams only)
+	respMarks []chunkMark
+}
+
+// How the worker reads the response (Exchange.sseMode)
+const (
+	sseUnknown     = iota // no response byte processed yet
+	sseIncremental        // event stream: parsed as the chunks arrive
+	sseNone               // not an event stream
+	sseEncoded            // compressed event stream: decoded at the end, each event stamped with its chunk's arrival
+)
+
+// chunkMark is the end of a response chunk in the body and its arrival time
+type chunkMark struct {
+	end int64
+	at  time.Time
 }
 
 // Begin starts recording an exchange of the run. It returns nil when the
@@ -510,23 +527,58 @@ func (e *Exchange) process(ch chunk) {
 	if ch.part != respPart {
 		return
 	}
-	if e.sseMode == 0 {
+	if e.sseMode == sseUnknown {
 		e.mu.Lock()
 		ct, enc := e.respContentType, e.respContentEnc
 		e.mu.Unlock()
-		if isEventStream(ct) && (enc == "" || strings.EqualFold(enc, "identity")) {
-			e.sseMode = 1
+		switch {
+		case !isEventStream(ct):
+			e.sseMode = sseNone
+		case enc == "" || strings.EqualFold(enc, "identity"):
+			e.sseMode = sseIncremental
 			e.sse = anthropicwire.NewSSEParser(0)
 			e.recon = anthropicwire.NewReconstructor()
-		} else {
-			e.sseMode = 2
+		default:
+			e.sseMode = sseEncoded
 		}
 	}
-	if e.sseMode == 1 {
+	switch e.sseMode {
+	case sseIncremental:
 		for _, ev := range e.sse.Feed(ch.data) {
 			e.addEvent(ev, ch.at)
 		}
+	case sseEncoded:
+		e.respMarks = append(e.respMarks, chunkMark{end: e.bodies[respPart].size, at: ch.at})
 	}
+}
+
+// timedReader reads a kept response body one arrived chunk per Read and
+// remembers when the chunk it read last arrived: decoded bytes come out of
+// a decoder only after the chunk holding them was read (see
+// anthropicwire.NewStreamDecoder), so that time is their arrival
+type timedReader struct {
+	data  []byte
+	marks []chunkMark
+	pos   int64
+	i     int
+	at    time.Time
+}
+
+func (r *timedReader) Read(p []byte) (int, error) {
+	if r.pos >= int64(len(r.data)) {
+		return 0, io.EOF
+	}
+	for r.i < len(r.marks)-1 && r.marks[r.i].end <= r.pos {
+		r.i++
+	}
+	end := int64(len(r.data))
+	if r.i < len(r.marks) {
+		end = min(end, r.marks[r.i].end)
+		r.at = r.marks[r.i].at
+	}
+	n := copy(p, r.data[r.pos:end])
+	r.pos += int64(n)
+	return n, nil
 }
 
 // addEvent interprets an SSE event that arrived at "at"

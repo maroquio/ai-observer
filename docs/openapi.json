@@ -748,7 +748,7 @@
             "type": "string"
           },
           "pricePerMTok": {
-            "description": "PricePerMTok is the catalog price per million tokens; nil: no price",
+            "description": "PricePerMTok is the price per million tokens: the catalog's, or\nderived from it (cache_write_1h: twice the input price, see Note);\nnil: no price",
             "format": "double",
             "type": "number"
           },
