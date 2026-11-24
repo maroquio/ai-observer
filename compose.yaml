@@ -1,0 +1,44 @@
+# AI Observer with the HTTP Inspector, built from this repository, for
+# Claude Code running on this machine (docs/http-inspector/QUICKSTART.md).
+#
+#   docker compose up -d --build     # first build: a few minutes, large download
+#   export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+#   claude
+#
+# Dashboard: http://127.0.0.1:8080/http-inspector. Stop: docker compose down
+# (the data stays in the ai-observer-data volume; "down -v" deletes it).
+#
+# Ports are published on 127.0.0.1 only: there is no authentication, and the
+# captures hold prompts, code and account details. A taken port is changed
+# with the variable of the same name, e.g. AI_OBSERVER_API_PORT=8081 docker
+# compose up -d; the container listens on the same port, so the links the
+# dashboard shows stay right.
+#
+# "ai-observer run -- claude" does not work with the container (each run
+# opens a port of its own inside it): use ANTHROPIC_BASE_URL as above.
+
+services:
+  ai-observer:
+    build: .
+    image: ai-observer-inspector:local
+    command: ["serve"]
+    environment:
+      AI_OBSERVER_API_PORT: ${AI_OBSERVER_API_PORT:-8080}
+      AI_OBSERVER_OTLP_PORT: ${AI_OBSERVER_OTLP_PORT:-4318}
+      AI_OBSERVER_OTLP_GRPC_PORT: ${AI_OBSERVER_OTLP_GRPC_PORT:-4317}
+      AI_OBSERVER_HTTP_PROXY_ENABLED: "true"
+      AI_OBSERVER_HTTP_PROXY_PORT: ${AI_OBSERVER_HTTP_PROXY_PORT:-8787}
+      # Inside the container the proxy has to listen on all interfaces to be
+      # reachable through the published port, which is bound to 127.0.0.1
+      AI_OBSERVER_HTTP_PROXY_HOST: 0.0.0.0
+      AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE: "true"
+    ports:
+      - "127.0.0.1:${AI_OBSERVER_API_PORT:-8080}:${AI_OBSERVER_API_PORT:-8080}"
+      - "127.0.0.1:${AI_OBSERVER_OTLP_PORT:-4318}:${AI_OBSERVER_OTLP_PORT:-4318}"
+      - "127.0.0.1:${AI_OBSERVER_OTLP_GRPC_PORT:-4317}:${AI_OBSERVER_OTLP_GRPC_PORT:-4317}"
+      - "127.0.0.1:${AI_OBSERVER_HTTP_PROXY_PORT:-8787}:${AI_OBSERVER_HTTP_PROXY_PORT:-8787}"
+    volumes:
+      - ai-observer-data:/app/data
+
+volumes:
+  ai-observer-data:

@@ -108,12 +108,22 @@ São fontes diferentes e **não são somadas**:
 
 ## Docker / host
 
-O proxy escuta em `127.0.0.1` por padrão; dentro de um container isso não
-é alcançável de fora. Para expor, defina
-`AI_OBSERVER_HTTP_PROXY_HOST=0.0.0.0` **e**
-`AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE=true`, publique a porta só em
-`127.0.0.1` do host (`-p 127.0.0.1:8787:8787`) e use
-`AI_OBSERVER_AUTH_TOKEN` no dashboard. Não exponha o proxy à rede.
+O `compose.yaml` da raiz já faz o necessário (`docker compose up -d
+--build`). Sem ele: o proxy escuta em `127.0.0.1` por padrão, o que dentro
+de um contêiner não é alcançável de fora. Para expor, defina
+`AI_OBSERVER_HTTP_PROXY_ENABLED=true`, `AI_OBSERVER_HTTP_PROXY_HOST=0.0.0.0`
+**e** `AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE=true`, publique a porta só em
+`127.0.0.1` do host (`-p 127.0.0.1:8787:8787`) e, numa máquina
+compartilhada, use `AI_OBSERVER_AUTH_TOKEN` no dashboard. Não exponha o
+proxy à rede.
+
+- `exec /app/ai-observer: no such file or directory` ao iniciar: imagem
+  compilada com um Dockerfile anterior à correção de plataforma (Apple
+  Silicon). Atualize o repositório e compile de novo.
+- `ai-observer run -- claude` não funciona com o servidor no contêiner:
+  use `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`.
+- Porta ocupada no host: `AI_OBSERVER_API_PORT=8081 docker compose up -d`
+  (idem `_OTLP_PORT`, `_OTLP_GRPC_PORT`, `_HTTP_PROXY_PORT`).
 
 ## Logs vazios
 

@@ -14,6 +14,12 @@ Há duas formas de rodar:
   consumo, e não há garantia de que o modelo use uma ferramenta com um
   prompt específico.
 
+**Alunos com Docker** (`docker compose up -d --build`, [QUICKSTART](QUICKSTART.md)):
+modo real, com `export ANTHROPIC_BASE_URL=http://127.0.0.1:8787` antes do
+`claude`. O launcher (`ai-observer run`) e o upstream simulado precisam dos
+binários nativos: ficam para a máquina do professor. Peça que a imagem seja
+compilada antes da aula (alguns minutos e download grande).
+
 ## Preparação (antes da aula)
 
 ```bash

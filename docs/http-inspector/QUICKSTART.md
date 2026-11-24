@@ -23,6 +23,44 @@ make setup      # dependências (Go 1.26, Node 22, pnpm 10)
 make backend    # frontend embutido + binário em bin/ai-observer
 ```
 
+### Com Docker (sem Go nem Node na máquina)
+
+Pré-requisito: Docker Desktop (ou Docker Engine). Na raiz do repositório:
+
+```bash
+docker compose up -d --build     # compila a imagem e sobe o servidor com o proxy ligado
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+claude
+```
+
+- A primeira compilação leva alguns minutos e baixa bastante coisa
+  (imagens do Go e do Node, dependências): faça antes da aula, não no
+  Wi-Fi da sala. A imagem sai para a arquitetura da máquina (arm64 num Mac
+  Apple Silicon, amd64 em Intel e na maioria dos PCs Windows).
+- Painel: `http://127.0.0.1:8080/http-inspector`. Parar:
+  `docker compose down` (os dados ficam no volume `ai-observer-data`;
+  `docker compose down -v` os apaga).
+- Windows: PowerShell `$env:ANTHROPIC_BASE_URL="http://127.0.0.1:8787"`;
+  cmd `set ANTHROPIC_BASE_URL=http://127.0.0.1:8787`.
+- Porta ocupada: troque com a variável de mesmo nome, por exemplo
+  `AI_OBSERVER_HTTP_PROXY_PORT=8788 docker compose up -d` (também
+  `AI_OBSERVER_API_PORT`, `_OTLP_PORT`, `_OTLP_GRPC_PORT`), e use a porta
+  nova no `ANTHROPIC_BASE_URL`. Dentro e fora do contêiner a porta é a
+  mesma, então os endereços mostrados no painel continuam certos.
+- Telemetria OTLP (opcional, para a comparação proxy × telemetria): as
+  variáveis do Claude Code apontam para `http://127.0.0.1:4318`
+  (`CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_LOGS_EXPORTER=otlp`,
+  `OTEL_METRICS_EXPORTER=otlp`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`,
+  `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`).
+- **`ai-observer run -- claude` não funciona com o contêiner:** cada
+  execução abriria uma porta própria dentro dele, inalcançável do host.
+  Com Docker vale só o modo manual (seção 3): todas as requests entram na
+  execução `manual` do servidor, uma por vez que o contêiner inicia.
+- As portas são publicadas só em `127.0.0.1`. Dentro do contêiner o proxy
+  escuta em todas as interfaces (`AI_OBSERVER_HTTP_PROXY_HOST=0.0.0.0` com
+  `AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE=true`, definidos no
+  `compose.yaml`), alcançável apenas pela porta publicada.
+
 ## 2. Modo launcher (recomendado)
 
 Um terminal com o servidor:

@@ -509,7 +509,7 @@ Sent via the `@devtheops/opencode-plugin-otel` plugin. **Metrics:** `opencode.se
 | Database path | `./data/ai-observer.duckdb` | `/app/data/ai-observer.duckdb` |
 | Data directory | `./data/` | `/app/data/` |
 
-Override with `AI_OBSERVER_DATABASE_PATH` environment variable. The image exposes 8080, 4318 and 4317 (publish them on `127.0.0.1`) and its `HEALTHCHECK` runs `ai-observer healthcheck` (`GET /ready`), since the distroless image has no shell, curl or wget.
+Override with `AI_OBSERVER_DATABASE_PATH` environment variable. The image exposes 8080, 4318, 4317 and 8787 (publish them on `127.0.0.1`) and its `HEALTHCHECK` runs `ai-observer healthcheck` (`GET /ready`), since the distroless image has no shell, curl or wget. Both Dockerfile stages use the target platform (no `TARGETARCH` default: a fixed `amd64` once put an arm64 binary on an amd64 base on Apple Silicon). `compose.yaml` builds the image and runs `serve` with the HTTP Inspector proxy on (`AI_OBSERVER_HTTP_PROXY_HOST=0.0.0.0` + `AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE`, ports on `127.0.0.1`, named volume `ai-observer-data`); each port comes from its `AI_OBSERVER_*_PORT` variable and is the same inside and outside, so the `proxyUrl` the dashboard shows is right. `ai-observer run` does not work with the container (launcher ports open inside it): Claude Code uses `ANTHROPIC_BASE_URL`.
 
 ## CI/CD
 

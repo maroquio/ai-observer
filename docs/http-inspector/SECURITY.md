@@ -40,6 +40,15 @@ inclui a variante raw.
 - Nada é enviado a serviços externos; o proxy só fala com o upstream fixo.
 - Execuções podem ser apagadas individualmente (banco e arquivos).
 
+## Docker
+
+O `compose.yaml` faz o proxy escutar em `0.0.0.0` **dentro** do contêiner
+(com `AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE=true`) e publica todas as
+portas só em `127.0.0.1` do host: de fora da máquina nada é alcançável.
+Não troque `127.0.0.1:` por uma publicação em todas as interfaces: o
+dashboard não tem autenticação sem `AI_OBSERVER_AUTH_TOKEN`, e o proxy
+encaminharia requests de qualquer um para a API.
+
 ## Export
 
 `GET /api/http-inspector/runs/{id}/export` gera um zip local com a execução,

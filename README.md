@@ -69,6 +69,8 @@ ai-observer run -- claude               # a capture run with a port of its own; 
 # or: export ANTHROPIC_BASE_URL=http://127.0.0.1:8787 && claude
 ```
 
+With Docker, built from this repository with the proxy on and every port on `127.0.0.1`: `docker compose up -d --build`, then `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` (`compose.yaml`; `ai-observer run` needs the binary, since each run opens a port of its own).
+
 What you get, on each session's **API traffic** tab and the **HTTP Inspector** page:
 
 - every exchange in order — inference, `count_tokens` (kept apart from inference usage), errors, retries and other endpoints — with a deterministic one-line description;
@@ -143,6 +145,8 @@ docker run -d \
 ```
 
 This stores the DuckDB database in your local `./ai-observer-data` directory, making it easy to backup or inspect.
+
+**Building from this repository with the HTTP Inspector on:** `docker compose up -d --build` (`compose.yaml`: the image is built for the machine's architecture, the proxy listens on port 8787, all ports are published on `127.0.0.1`; see [HTTP Inspector](#http-inspector-anthropic-api-traffic)).
 
 ### Using Homebrew (macOS Apple Silicon)
 

@@ -708,6 +708,15 @@ export const DOCUMENTATION_SECTIONS: DocSection[] = [
         text: 'Também é possível apontar ANTHROPIC_BASE_URL manualmente para a porta compartilhada do proxy (padrão 8787, AI_OBSERVER_HTTP_PROXY_PORT). Por padrão o proxy só escuta em loopback (outra interface exige AI_OBSERVER_HTTP_CAPTURE_ALLOW_REMOTE) e só encaminha para um destino fixo (AI_OBSERVER_HTTP_PROXY_UPSTREAM, padrão https://api.anthropic.com). A captura nunca atrasa o tráfego: se a fila encher, registros são descartados e contados, e a troca aparece como "captura degradada".',
       },
       {
+        type: 'paragraph',
+        text: 'Com Docker (compose.yaml na raiz do repositório), o servidor sobe com o proxy ligado e todas as portas publicadas só em 127.0.0.1. O launcher não funciona com o contêiner, porque cada execução abriria uma porta dentro dele: aponte ANTHROPIC_BASE_URL para a porta compartilhada. As requests entram na execução manual.',
+      },
+      {
+        type: 'code',
+        text: 'Com Docker',
+        code: 'docker compose up -d --build\nexport ANTHROPIC_BASE_URL=http://127.0.0.1:8787\nclaude',
+      },
+      {
         type: 'heading',
         level: 3,
         text: 'Modos de captura',
