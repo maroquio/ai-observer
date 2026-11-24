@@ -1,4 +1,4 @@
-.PHONY: all backend frontend backend-dev backend-test backend-lint backend-coverage frontend-dev frontend-test frontend-lint frontend-coverage dev clean test lint coverage setup help release-notes pricing-update check-pricing api-types
+.PHONY: all backend frontend backend-dev backend-test backend-lint backend-coverage frontend-dev frontend-test frontend-lint frontend-coverage dev clean test lint coverage setup help release-notes pricing-update check-pricing api-types fake-anthropic
 
 # Version information
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -128,6 +128,10 @@ check-pricing:
 release-notes:
 	@./scripts/generate-release-notes.sh $(TAG)
 
+# Simulated Anthropic API for keyless HTTP Inspector demos (docs/http-inspector/TEACHING_DEMO.md)
+fake-anthropic:
+	cd backend && go build -o ../bin/fake-anthropic ./cmd/fake-anthropic
+
 # Help
 help:
 	@echo "Available targets:"
@@ -148,4 +152,5 @@ help:
 	@echo "  pricing-update    - Refresh the built-in prices from models.dev"
 	@echo "  check-pricing     - Fail when pricing data is more than 7 days old"
 	@echo "  api-types         - Generate the frontend's API types and docs/openapi.json from the Go types"
+	@echo "  fake-anthropic    - Build the simulated Anthropic API for keyless HTTP Inspector demos"
 	@echo "  help              - Show this help message"

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **HTTP Inspector: Claude Code's Anthropic API traffic as it went over the wire** (off by default; `docs/http-inspector/`). A local reverse proxy for `ANTHROPIC_BASE_URL` (`ai-observer serve --http-proxy`, `127.0.0.1:8787`, fixed upstream `https://api.anthropic.com`) forwards requests unchanged and records each exchange: sanitized request and response headers and bodies, the `system` prompt and `tools` actually sent, every server-sent event with its arrival time, `count_tokens` calls (kept apart from inference usage), errors, retries and other endpoints. Usage follows the API's cumulative semantics, with cache reads and 5-minute/1-hour cache writes; the API-equivalent cost comes from the price catalog (`partial` or `unavailable` instead of an invented zero). `tool_use` blocks are linked to the `tool_result` of a later request, and a Context Diff compares each request with the previous one of its conversation.
+- **`ai-observer run -- claude`**: starts a program with its own capture run and proxy port, changing only `ANTHROPIC_BASE_URL` in its environment (its login passes through); exits with the program's status. `--serve` starts a server for the run alone.
+- **Dashboard**: an "API traffic" tab on session pages (summary, timeline of every exchange, inspector with Summary, Request, Response, SSE Stream, Tokens & Cache and Context Diff tabs, deep links `/sessions/{id}/http-exchanges/{exchangeId}`), an HTTP Inspector page with capture runs, tool links, rename, sanitized zip export and deletion, live updates over the WebSocket (`http_exchanges` messages), and the number of captured exchanges in session lists (`httpExchanges`).
+- **API**: `/api/http-inspector/*` (status, runs, exchanges, bodies, SSE events, usage, diff, tool links, export) and `/api/sessions/{id}/http-exchanges`, which compares the proxy's requests with the session's OTLP telemetry by request ID without adding them up. `/api/status` has an `httpInspector` section.
+- Settings `AI_OBSERVER_HTTP_PROXY_ENABLED`, `_HOST`, `_PORT`, `_UPSTREAM` and `AI_OBSERVER_HTTP_CAPTURE_MODE` (`safe`, `metadata_only`, `full_raw`), `_DIR`, `_MAX_BODY_BYTES`, `_QUEUE_SIZE`, `_RETENTION_DAYS`, `_STORAGE_LIMIT`, `_ALLOW_REMOTE`; flags `--http-proxy` and `--http-proxy-port`. Credential headers are never stored, in any mode.
+- `cmd/fake-anthropic` (`make fake-anthropic`): a simulated Messages API for keyless demonstrations, used by the teaching demo.
+
 ## [0.8.0] - 2026-11-21
 
 ### Upgrade notes
