@@ -7,6 +7,8 @@ import { NotFoundPage } from '@/pages/NotFoundPage'
 
 // Pages are loaded on demand so the initial bundle only contains the app shell
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
+// The default dashboard, or the data sources while no telemetry is stored
+const HomePage = lazy(() => import('@/pages/HomePage').then((m) => ({ default: m.HomePage })))
 const TracesPage = lazy(() => import('@/pages/TracesPage').then((m) => ({ default: m.TracesPage })))
 const TraceDetailPage = lazy(() => import('@/pages/TraceDetailPage').then((m) => ({ default: m.TraceDetailPage })))
 const MetricsPage = lazy(() => import('@/pages/MetricsPage').then((m) => ({ default: m.MetricsPage })))
@@ -48,7 +50,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
-        <Route index element={page(<Dashboard />)} />
+        <Route index element={page(<HomePage />)} />
         <Route path="dashboard/:id" element={page(<Dashboard />)} />
         <Route path="traces" element={page(<TracesPage />)} />
         <Route path="traces/:kind/:id" element={page(<TraceDetailPage />)} />

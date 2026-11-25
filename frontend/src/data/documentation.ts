@@ -66,6 +66,10 @@ export const DOCUMENTATION_SECTIONS: DocSection[] = [
         text: 'Pages keep their filters and time range in the address, so a reload or a shared link shows the same view. The current page is highlighted in the sidebar; the server version is shown at its bottom.',
       },
       {
+        type: 'paragraph',
+        text: 'The sidebar lists only the pages whose data source has data: Metrics and Dashboards once metrics are stored, Logs once logs are, Traces once spans are, Sessions once logs or spans are (Claude Code sends metrics and logs but no spans, so Traces stays hidden), and the HTTP Inspector while its proxy runs or captures are stored. A page appears as soon as its first records arrive, without a reload; a hidden page still opens from a link. While no telemetry is stored, the home page shows the data sources instead of the dashboard (the API traffic proxy, OTLP telemetry and session files), which of them are on and the commands that turn on the others.',
+      },
+      {
         type: 'heading',
         level: 3,
         text: 'Real-time Updates',

@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
-import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { api, type HTTPExchangeQuery, type MetricQuery } from '@/lib/api'
+import type { DashboardsResponse, DashboardWithWidgets } from '@/types/dashboard'
+import type { StatusResponse } from '@/types/status'
 import { resolveRangeParams, type RangeSource, type TimeSelectionKey } from '@/lib/timeUtils'
 import { useProviderStore } from '@/stores/providerStore'
 import type { TraceKind } from '@/types/traces'
@@ -172,6 +174,8 @@ export const queryKeys = {
     runTools: (runId: string) => ['http-inspector', 'run', runId, 'tools'] as const,
     sessions: ['http-inspector', 'session'] as const,
     inspectorSessions: ['http-inspector', 'sessions'] as const,
+    // Below inspectorSessions, so what refreshes the list refreshes it too
+    capturesStored: ['http-inspector', 'sessions', 'any'] as const,
     sessionTurns: (sessionId: string) => ['http-inspector', 'session', sessionId, 'turns'] as const,
     session: (sessionId: string) => ['http-inspector', 'session', sessionId] as const,
     sessionSummary: (sessionId: string) => ['http-inspector', 'session', sessionId, 'summary'] as const,
@@ -477,6 +481,17 @@ export function useHTTPInspectorSessions(options: QueryOptions = {}) {
   })
 }
 
+/** Whether any captured exchange is stored (a one-row page of the session list) */
+export function useHTTPCapturesStored(options: QueryOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.httpInspector.capturesStored,
+    queryFn: ({ signal }) => api.getHTTPInspectorSessions({ limit: 1 }, { signal }),
+    select: (data) => data.total > 0 || data.sessions.length > 0,
+    staleTime: 60_000,
+    ...options,
+  })
+}
+
 /** A session's captured traffic grouped into turns ('' for the exchanges without a session) */
 export function useHTTPSessionTurns(sessionId: string, options: QueryOptions = {}) {
   return useQuery({
@@ -656,7 +671,7 @@ export function useHTTPExchangeDiff(exchangeId: string, options: QueryOptions = 
 // ============================================================================
 
 /** GET /api/status (the status page and the sidebar's version) */
-export function useStatus(options: QueryOptions = {}) {
+export function useStatus(options: QueryOptions & Pick<UseQueryOptions<StatusResponse>, 'refetchInterval'> = {}) {
   return useQuery({
     queryKey: queryKeys.status,
     queryFn: ({ signal }) => api.getStatus({ signal }),
@@ -669,10 +684,37 @@ export function useStatus(options: QueryOptions = {}) {
 // Dashboards
 // ============================================================================
 
+// The server creates the default dashboard when it is first asked for it:
+// a list requested before that lacks it
+function lacksDashboard(list: DashboardsResponse | undefined, dashboard: DashboardWithWidgets | null | undefined): boolean {
+  return Boolean(dashboard) && !list?.dashboards?.some((d) => d.id === dashboard?.id)
+}
+
 export function useDashboards(options: QueryOptions = {}) {
+  const queryClient = useQueryClient()
   return useQuery({
     queryKey: queryKeys.dashboards.list,
-    queryFn: ({ signal }) => api.getDashboards({ signal }),
+    queryFn: async ({ signal }) => {
+      const list = await api.getDashboards({ signal })
+      const known = queryClient.getQueryData<DashboardWithWidgets | null>(queryKeys.dashboards.default)
+      const creating = queryClient.getQueryState(queryKeys.dashboards.default)?.fetchStatus === 'fetching'
+      if ((list.dashboards ?? []).length === 0 && known === undefined && creating) {
+        // A new database while the dashboard page asks for the default
+        // dashboard: wait for that request, then list again. Never asked
+        // here otherwise, so a deleted last dashboard is not recreated.
+        try {
+          const created = await queryClient.fetchQuery({
+            queryKey: queryKeys.dashboards.default,
+            queryFn: ({ signal }) => api.getDefaultDashboard({ signal }),
+          })
+          return created ? await api.getDashboards({ signal }) : list
+        } catch {
+          return list
+        }
+      }
+      // Sent before the default dashboard request created it: ask once more
+      return lacksDashboard(list, known) ? api.getDashboards({ signal }) : list
+    },
     select: (data) => data.dashboards ?? [],
     ...options,
   })
@@ -680,9 +722,19 @@ export function useDashboards(options: QueryOptions = {}) {
 
 /** The default dashboard with its widgets; the server creates it when none exists (null only from servers before that) */
 export function useDefaultDashboard(options: QueryOptions = {}) {
+  const queryClient = useQueryClient()
   return useQuery({
     queryKey: queryKeys.dashboards.default,
-    queryFn: ({ signal }) => api.getDefaultDashboard({ signal }),
+    queryFn: async ({ signal }) => {
+      const dashboard = await api.getDefaultDashboard({ signal })
+      // This request may have created it: a list loaded before lacks it (one
+      // still loading checks for itself, see useDashboards)
+      const list = queryClient.getQueryData<DashboardsResponse>(queryKeys.dashboards.list)
+      if (list && lacksDashboard(list, dashboard)) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.dashboards.list, exact: true })
+      }
+      return dashboard
+    },
     ...options,
   })
 }
