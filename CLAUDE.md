@@ -282,6 +282,8 @@ export OTEL_METRICS_EXPORTER=otlp
 export OTEL_LOGS_EXPORTER=otlp
 export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1   # optional: traces (beta)
+export OTEL_TRACES_EXPORTER=otlp
 
 # Gemini CLI - add to ~/.gemini/settings.json
 # { "telemetry": { "enabled": true, "target": "local", "useCollector": true, "otlpEndpoint": "http://localhost:4318" } }
@@ -460,6 +462,8 @@ Log, span and trace rows carry `sessionId` (a trace when all its spans with a se
 - `claude_code.cost.usage_user_facing` - Cost from user-facing API calls only (excludes tool-routing)
 
 **Import-only reconstruction:** full imports rebuild lines of code, commits, PR counts (distinct PR links, not confirmed PR creation), session counts, and active time from session files.
+
+**Traces** (beta, only with `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` and `OTEL_TRACES_EXPORTER=otlp`; verified with 2.1.331): a trace per interaction, root `claude_code.interaction` (`invoke_agent`), children `claude_code.llm_request` (`chat`, with `request_id` and usage) and `claude_code.tool` (`execute_tool`, with `.blocked_on_user` and `.execution` below it). The events hang off the interaction span, so transcripts merge an `llm_request` span's reply with the event of its `request_id` (`mergeSpans`), and a tool span with its events by `tool_use_id`.
 
 **Events** (logs): `user_prompt`, `api_request`, `api_error`, `tool_result`, `tool_decision`, `assistant_response` (Claude Code 2.1 with content logging: reply text in `response`; merged with its request's `api_request` usage in transcripts). `user_prompt` and `assistant_response` carry `message.uuid`, the session file entry's `uuid`; the request and tool events carry `request_id`, tool events `tool_use_id`.
 

@@ -51,7 +51,9 @@ claude
   variáveis do Claude Code apontam para `http://127.0.0.1:4318`
   (`CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_LOGS_EXPORTER=otlp`,
   `OTEL_METRICS_EXPORTER=otlp`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`,
-  `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`).
+  `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`); traces, beta no
+  Claude Code, também com `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` e
+  `OTEL_TRACES_EXPORTER=otlp`.
 - **`ai-observer run -- claude` não funciona com o contêiner:** cada
   execução abriria uma porta própria dentro dele, inalcançável do host.
   Com Docker vale só o modo manual (seção 3): todas as requests entram na

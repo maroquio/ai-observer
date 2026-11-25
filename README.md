@@ -621,11 +621,15 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 # Set shorter intervals
 export OTEL_METRIC_EXPORT_INTERVAL=10000  # 10 seconds (default: 60000ms)
 export OTEL_LOGS_EXPORT_INTERVAL=5000     # 5 seconds (default: 5000ms)
+
+# Optional: traces (beta in Claude Code)
+export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
+export OTEL_TRACES_EXPORTER=otlp
 ```
 
 Add these to your `~/.bashrc`, `~/.zshrc`, or shell profile to persist across sessions.
 
-Claude Code will then automatically send metrics and events to AI Observer.
+Claude Code will then automatically send metrics and events to AI Observer, and with the last two variables a trace per interaction (`claude_code.interaction`, with `claude_code.llm_request` and `claude_code.tool` spans). Without them Claude Code sends no spans, and the Traces page stays hidden.
 
 </details>
 

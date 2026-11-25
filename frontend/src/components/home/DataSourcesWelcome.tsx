@@ -71,6 +71,9 @@ function OTLPSource({ status }: { status: StatusResponse }) {
     'export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf',
     `export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:${port}`,
     'export OTEL_LOG_USER_PROMPTS=1',
+    '# Traces (beta no Claude Code)',
+    'export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1',
+    'export OTEL_TRACES_EXPORTER=otlp',
   ].join('\n')
 
   return (

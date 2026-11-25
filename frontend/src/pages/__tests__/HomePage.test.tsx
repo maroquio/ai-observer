@@ -43,6 +43,8 @@ describe('HomePage', () => {
     const otlp = screen.getByRole('region', { name: 'Telemetria OTLP' })
     expect(within(otlp).getByText('Aguardando dados')).toBeInTheDocument()
     expect(within(otlp).getByText(/OTEL_EXPORTER_OTLP_ENDPOINT=http:\/\/localhost:4400/)).toBeInTheDocument()
+    // Claude Code sends no spans without its tracing beta
+    expect(within(otlp).getByText(/CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1\s+export OTEL_TRACES_EXPORTER=otlp/)).toBeInTheDocument()
 
     const files = screen.getByRole('region', { name: 'Arquivos de sessão' })
     expect(within(files).getByText('Desligado')).toBeInTheDocument()

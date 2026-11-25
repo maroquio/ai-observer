@@ -7,6 +7,7 @@ import (
 	"github.com/tobilg/ai-observer/internal/api"
 	"github.com/tobilg/ai-observer/internal/msgmerge"
 	"github.com/tobilg/ai-observer/internal/storage"
+	"github.com/tobilg/ai-observer/internal/tools"
 )
 
 // toolCallID returns the ID of the tool call that a tool message with these
@@ -152,7 +153,8 @@ func merge(records []record, i, j int) {
 }
 
 // mergeSpans merges span messages into the log messages that describe the
-// same message (by span and content, or tool call ID) and adds the others
+// same message (by span and content, tool call ID, or the API request a
+// reply answers) and adds the others
 func mergeSpans(records []record, spans []spanTranscriptMessage) []record {
 	if len(spans) == 0 {
 		return records
@@ -165,8 +167,14 @@ func mergeSpans(records []record, spans []spanTranscriptMessage) []record {
 		return messageKey{source, msg.Role, msg.Content, msg.ToolName, msg.ToolInput, msg.ToolOutput}
 	}
 	type toolCallKey struct{ Tool, Role, ID string }
+	type requestKey struct{ Tool, ID string }
 	logMessages := make(map[messageKey]int)
 	logToolCalls := make(map[toolCallKey]int)
+	// The record of each API request's usage event (Claude Code's
+	// api_request, merged where the logs' rules put its usage), else its
+	// first reply: Claude Code's events hang off the interaction span, its
+	// claude_code.llm_request spans name the request instead
+	logRequests := make(map[requestKey]int)
 	for i, r := range records {
 		if r.hasSource {
 			logMessages[keyFor(r.source, r.msg)] = i
@@ -175,6 +183,12 @@ func mergeSpans(records []record, spans []spanTranscriptMessage) []record {
 			key := toolCallKey{r.tool, r.msg.Role, r.callID}
 			if _, seen := logToolCalls[key]; !seen {
 				logToolCalls[key] = i
+			}
+		}
+		if r.key.Request != "" {
+			key := requestKey{r.tool, r.key.Request}
+			if _, seen := logRequests[key]; r.key.Event == tools.UsageEvent || (!seen && r.msg.Role == tools.RoleAssistant) {
+				logRequests[key] = i
 			}
 		}
 	}
@@ -188,6 +202,12 @@ func mergeSpans(records []record, spans []spanTranscriptMessage) []record {
 		}
 		if span.ToolCallID != "" {
 			if j, ok := logToolCalls[toolCallKey{spanRecord.tool, span.Message.Role, span.ToolCallID}]; ok {
+				merge(records, i, j)
+				continue
+			}
+		}
+		if span.RequestID != "" {
+			if j, ok := logRequests[requestKey{spanRecord.tool, span.RequestID}]; ok {
 				merge(records, i, j)
 			}
 		}

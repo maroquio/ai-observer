@@ -92,6 +92,11 @@ export OTEL_LOGS_EXPORT_INTERVAL=5000     # 5 seconds (default: 5000ms)
 # 5. Log prompts
 export OTEL_LOG_USER_PROMPTS=1
 
+# 6. Optional: traces (beta in Claude Code): a trace per interaction, with a
+#    span per API request and per tool call
+export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
+export OTEL_TRACES_EXPORTER=otlp
+
 Optional: HTTP Inspector (the Anthropic API traffic itself)
 -----------------------------------------------------------
 

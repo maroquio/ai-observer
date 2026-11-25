@@ -112,6 +112,9 @@ type spanTranscriptMessage struct {
 	// ToolCallID is the ID of the tool call a tool message of the span
 	// belongs to, if the span names one (tools.ToolCallIDKeys)
 	ToolCallID string
+	// RequestID is the API request a reply of the span answers, if the span
+	// names one (tools.RequestIDKey: Claude Code's claude_code.llm_request)
+	RequestID string
 }
 
 func transcriptMessagesFromSpans(spans []api.Span, logs []storage.SessionLog) []spanTranscriptMessage {
@@ -170,7 +173,11 @@ func transcriptMessagesFromSpans(spans []api.Span, logs []storage.SessionLog) []
 					msg.InputTokens, msg.OutputTokens, msg.CacheRead, msg.CacheWrite = 0, 0, 0, 0
 				}
 			}
-			messages = append(messages, spanTranscriptMessage{Source: spanKey(span), Message: msg, ToolCallID: toolCallID(span.SpanAttributes, msg.Role)})
+			m := spanTranscriptMessage{Source: spanKey(span), Message: msg, ToolCallID: toolCallID(span.SpanAttributes, msg.Role)}
+			if msg.Role == tools.RoleAssistant {
+				m.RequestID = span.SpanAttributes[tools.RequestIDKey]
+			}
+			messages = append(messages, m)
 		}
 	}
 	return messages

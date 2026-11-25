@@ -375,3 +375,74 @@ func TestSessionTranscript_ClaudeToolSpanIsNotASecondToolCall(t *testing.T) {
 		t.Errorf("messages = %d, want prompt, Bash call, Bash result, Read call", len(resp.Messages))
 	}
 }
+
+// Claude Code's tracing beta (CLAUDE_CODE_ENHANCED_TELEMETRY_BETA) sends a
+// claude_code.llm_request span per API request, while its events hang off
+// the interaction span: the span and the api_request event of one request
+// (one request_id) are one reply, counted once
+func TestSessionTranscript_ClaudeLLMRequestSpanIsNotASecondReply(t *testing.T) {
+	s := transcriptRegressionStore(t)
+	ctx := context.Background()
+	start := time.Date(2026, 11, 25, 0, 50, 0, 0, time.UTC)
+	with := func(extra map[string]string) map[string]string {
+		attrs := map[string]string{"session.id": "s1"}
+		for k, v := range extra {
+			attrs[k] = v
+		}
+		return attrs
+	}
+	llmRequest := func(id, request string, at time.Duration, input, output string) api.Span {
+		return api.Span{Timestamp: start.Add(at), TraceID: "t1", SpanID: id, ParentSpanID: "interaction", SpanName: "claude_code.llm_request",
+			ServiceName: "claude-code", Duration: int64(time.Second), SpanAttributes: with(map[string]string{
+				"gen_ai.operation.name": "chat", "gen_ai.request.model": "claude-haiku-5-5", "request_id": request,
+				"gen_ai.usage.input_tokens": input, "gen_ai.usage.output_tokens": output})}
+	}
+	if err := s.InsertSpans(ctx, []api.Span{
+		{Timestamp: start, TraceID: "t1", SpanID: "interaction", SpanName: "claude_code.interaction", ServiceName: "claude-code",
+			Duration: int64(5 * time.Second), SpanAttributes: with(map[string]string{"gen_ai.operation.name": "invoke_agent"})},
+		llmRequest("llm1", "req_1", time.Second, "21743", "128"),
+		{Timestamp: start.Add(2 * time.Second), TraceID: "t1", SpanID: "tool", ParentSpanID: "interaction", SpanName: "claude_code.tool",
+			ServiceName: "claude-code", Duration: int64(time.Second), SpanAttributes: with(map[string]string{
+				"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "Read", "gen_ai.tool.call.id": "toolu_1"})},
+		llmRequest("llm2", "req_2", 3*time.Second, "25145", "441"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	usage := func(request string, at time.Duration, output, cost string) api.LogRecord {
+		return api.LogRecord{Timestamp: start.Add(at), ServiceName: "claude-code", TraceID: "t1", SpanID: "interaction",
+			LogAttributes: with(map[string]string{"event.name": "api_request", "request_id": request, "model": "claude-haiku-5-5",
+				"input_tokens": "2", "output_tokens": output, "cache_read_tokens": "11223", "cost_usd": cost, "duration_ms": "1000"})}
+	}
+	if err := s.InsertLogs(ctx, []api.LogRecord{
+		{Timestamp: start, ServiceName: "claude-code", TraceID: "t1", SpanID: "interaction",
+			LogAttributes: with(map[string]string{"event.name": "user_prompt", "prompt": "count the lines"})},
+		usage("req_1", 2*time.Second, "128", "0.002"),
+		{Timestamp: start.Add(2 * time.Second), ServiceName: "claude-code", TraceID: "t1", SpanID: "interaction",
+			LogAttributes: with(map[string]string{"event.name": "tool_result", "tool_name": "Read", "tool_use_id": "toolu_1", "success": "true", "request_id": "req_1"})},
+		usage("req_2", 4*time.Second, "441", "0.001"),
+		{Timestamp: start.Add(4 * time.Second), ServiceName: "claude-code", TraceID: "t1", SpanID: "interaction",
+			LogAttributes: with(map[string]string{"event.name": "assistant_response", "request_id": "req_2", "response": "3"})},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := transcript.Load(ctx, s, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var replies []api.TranscriptMessage
+	for _, m := range resp.Messages {
+		if m.Role == "assistant" {
+			replies = append(replies, m)
+		}
+	}
+	if len(replies) != 2 {
+		t.Fatalf("assistant messages = %+v, want one per request", replies)
+	}
+	if resp.Totals.OutputTokens != 128+441 || resp.Totals.InputTokens != 4 {
+		t.Errorf("totals = %+v, want the events' usage once (output 569, input 4)", resp.Totals)
+	}
+	if replies[1].Content != "3" || replies[1].OutputTokens != 441 {
+		t.Errorf("second reply = %+v, want the reply text with its request's usage", replies[1])
+	}
+}
